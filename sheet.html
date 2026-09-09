@@ -626,6 +626,8 @@
     padding:2px 4px;
   }
   .item-legend{ margin:0 0 8px; }
+  .item-group{ margin-bottom:24px; }
+  .item-group:last-child{ margin-bottom:0; }
 </style>
 </head>
 <body>
@@ -1441,6 +1443,65 @@
     renderPeopleList(data);
   }
 
+  function buildPersonRow(p){
+    const model = normalizePeriods(p.data)[summaryPeriod];
+    const items = (model && model.items) || [];
+    const itemCells = Array.from({ length: 5 }, (_, i) => {
+      const it = items[i];
+      if(!it) return '<td>—</td><td>—</td>';
+      const tierCount = (it.tiers ? it.tiers.length : 6) || 6;
+      const before = (it.self !== null && it.self !== undefined) ? it.self : '—';
+      const after = effectiveValue(it);
+      return `<td class="col-before">${before}</td>` +
+        `<td class="col-after"><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(after, tierCount)}</select></td>`;
+    }).join('');
+    const contrib = model ? model.contribution : null;
+    const contribCells = contrib
+      ? (() => {
+          const before = (contrib.self !== null && contrib.self !== undefined) ? contrib.self : '—';
+          const after = effectiveValue(contrib);
+          return `<td class="col-before">${before}</td>` +
+            `<td class="col-after"><input type="number" class="summary-contrib-input" min="0" max="${contrib.weight}" value="${after ?? ''}" placeholder="0-${contrib.weight}"></td>`;
+        })()
+      : '<td>—</td><td>—</td>';
+    const gradeBefore = fmtGrade(computeTotalBefore(model));
+    const gradeAfter = fmtGrade(computeTotalAfter(model));
+    return `
+      <tr class="person-row" data-id="${p.id}">
+        <td class="col-name">${escapeHtml(p.name)}</td>
+        ${itemCells}
+        ${contribCells}
+        <td class="col-before"><span class="grade-pill">${gradeBefore}</span></td>
+        <td class="col-after"><span class="grade-pill after">${gradeAfter}</span></td>
+      </tr>`;
+  }
+
+  function buildGroupTable(items, rowsHtml){
+    const legendText = items.length > 0
+      ? items.map((it, i) => `${['①','②','③','④','⑤'][i] || (i + 1)} ${it.name.replace(/\n/g, ' ')}`).join('　／　')
+      : 'データ未登録の項目';
+    const itemHeaders = ['①', '②', '③', '④', '⑤']
+      .map(label => `<th colspan="2">${label}</th>`).join('');
+    const beforeAfterHeaders = Array.from({ length: 5 }, () =>
+      `<th class="sub-head">Before</th><th class="sub-head">After</th>`).join('');
+    return `
+      <div class="item-group">
+        <p class="footnote item-legend">${escapeHtml(legendText)}</p>
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th class="col-name" rowspan="2">氏名</th>
+              ${itemHeaders}
+              <th colspan="2">貢献ポイント</th>
+              <th colspan="2">評価ランク</th>
+            </tr>
+            <tr>${beforeAfterHeaders}<th class="sub-head">Before</th><th class="sub-head">After</th><th class="sub-head">Before</th><th class="sub-head">After</th></tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }
+
   function renderPeopleList(list){
     const container = document.getElementById('people-list');
     if(list.length === 0){
@@ -1448,67 +1509,27 @@
       return;
     }
     const sortedList = [...list].sort((a, b) => sortOrderIndex(a.name) - sortOrderIndex(b.name));
-    const rows = sortedList.map(p => {
+
+    // Group people whose ①-⑤ item names match, in the order each distinct
+    // set first appears (i.e. following the roster order above).
+    const groups = [];
+    const groupBySignature = new Map();
+    sortedList.forEach(p => {
       const model = normalizePeriods(p.data)[summaryPeriod];
       const items = (model && model.items) || [];
-      const itemCells = Array.from({ length: 5 }, (_, i) => {
-        const it = items[i];
-        if(!it) return '<td>—</td><td>—</td>';
-        const tierCount = (it.tiers ? it.tiers.length : 6) || 6;
-        const before = (it.self !== null && it.self !== undefined) ? it.self : '—';
-        const after = effectiveValue(it);
-        return `<td class="col-before">${before}</td>` +
-          `<td class="col-after"><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(after, tierCount)}</select></td>`;
-      }).join('');
-      const contrib = model ? model.contribution : null;
-      const contribCells = contrib
-        ? (() => {
-            const before = (contrib.self !== null && contrib.self !== undefined) ? contrib.self : '—';
-            const after = effectiveValue(contrib);
-            return `<td class="col-before">${before}</td>` +
-              `<td class="col-after"><input type="number" class="summary-contrib-input" min="0" max="${contrib.weight}" value="${after ?? ''}" placeholder="0-${contrib.weight}"></td>`;
-          })()
-        : '<td>—</td><td>—</td>';
-      const gradeBefore = fmtGrade(computeTotalBefore(model));
-      const gradeAfter = fmtGrade(computeTotalAfter(model));
-      return `
-        <tr class="person-row" data-id="${p.id}">
-          <td class="col-name">${escapeHtml(p.name)}</td>
-          ${itemCells}
-          ${contribCells}
-          <td class="col-before"><span class="grade-pill">${gradeBefore}</span></td>
-          <td class="col-after"><span class="grade-pill after">${gradeAfter}</span></td>
-        </tr>`;
-    }).join('');
+      const signature = items.map(it => it.name).join('|');
+      let group = groupBySignature.get(signature);
+      if(!group){
+        group = { items, members: [] };
+        groupBySignature.set(signature, group);
+        groups.push(group);
+      }
+      group.members.push(p);
+    });
 
-    // Item names vary a little file to file, so use the first person that has
-    // data for this period as a representative legend, not a strict guarantee.
-    const legendSource = list
-      .map(p => normalizePeriods(p.data)[summaryPeriod])
-      .find(m => m && m.items && m.items.length > 0);
-    const legendText = legendSource
-      ? legendSource.items.map((it, i) => `${['①','②','③','④','⑤'][i] || (i+1)} ${it.name.replace(/\n/g, ' ')}`).join('　／　')
-      : '';
-
-    const itemHeaders = ['①', '②', '③', '④', '⑤']
-      .map(label => `<th colspan="2">${label}</th>`).join('');
-    const beforeAfterHeaders = Array.from({ length: 5 }, () =>
-      `<th class="sub-head">Before</th><th class="sub-head">After</th>`).join('');
-
-    container.innerHTML = `
-      ${legendText ? `<p class="footnote item-legend">${escapeHtml(legendText)}</p>` : ''}
-      <table class="summary-table">
-        <thead>
-          <tr>
-            <th class="col-name" rowspan="2">氏名</th>
-            ${itemHeaders}
-            <th colspan="2">貢献ポイント</th>
-            <th colspan="2">評価ランク</th>
-          </tr>
-          <tr>${beforeAfterHeaders}<th class="sub-head">Before</th><th class="sub-head">After</th><th class="sub-head">Before</th><th class="sub-head">After</th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+    container.innerHTML = groups
+      .map(g => buildGroupTable(g.items, g.members.map(buildPersonRow).join('')))
+      .join('');
   }
 
   document.getElementById('summary-period-switch').addEventListener('click', (e) => {
