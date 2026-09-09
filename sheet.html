@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
+<script src="scoring.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
 
@@ -635,6 +636,7 @@
     <span class="brand">評価シート</span>
     <div class="right">
       <span id="user-email"></span>
+      <a href="analysis.html">分析</a>
       <a href="admin.html" id="admin-link" hidden>ユーザー承認</a>
       <button class="link" id="logout-btn">ログアウト</button>
     </div>
@@ -674,9 +676,6 @@
 
 <script>
 (function(){
-  const escapeHtml = (s) => String(s ?? '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   const SAMPLE_MODEL = {
     meta:{
@@ -715,14 +714,6 @@
     }
   };
 
-  function gradeFor(total){
-    if(total >= 80) return 'S';
-    if(total >= 70) return 'A';
-    if(total >= 60) return 'B';
-    if(total >= 50) return 'C';
-    if(total >= 40) return 'D';
-    return 'E';
-  }
 
   function tierOptions(selected, tierCount){
     let out = `<option value="">未入力</option>`;
@@ -1072,14 +1063,6 @@
     return result;
   }
 
-  // Tolerates a legacy flat-model row shape (pre-period-split) by treating it as empty.
-  function normalizePeriods(data){
-    if(data && (data.first_half !== undefined || data.second_half !== undefined)){
-      return { first_half: data.first_half || null, second_half: data.second_half || null };
-    }
-    return { first_half: null, second_half: null };
-  }
-
   /* ---------- tab management ---------- */
   const state = {
     tabs: [], // [{id, name}]
@@ -1384,39 +1367,8 @@
   /* ---------- summary panel ---------- */
   let summaryPeriod = 'first_half';
 
-  // "before" is the original recorded value (self, read-only in the summary);
-  // "after" is an optional manager override (revisedSelf) editable only from the summary.
-  // Items and 貢献ポイント share this same {self, revisedSelf} shape.
-  function effectiveValue(obj){
-    return (obj.revisedSelf !== null && obj.revisedSelf !== undefined) ? obj.revisedSelf : obj.self;
-  }
-  function computeItemScoreWith(it, valueFn){
-    if(!it || it.weight === null || it.weight === undefined) return null;
-    const val = valueFn(it);
-    if(val === null || val === undefined) return null;
-    const max = it.maxPoint || (it.tiers ? it.tiers.length : 6) || 6;
-    return (Number(val) / max) * 100 * it.weight / 100;
-  }
-  function computeContribScoreWith(c, valueFn){
-    if(!c) return null;
-    const val = valueFn(c);
-    return (val === null || val === undefined) ? null : Number(val);
-  }
-  function computeTotalWith(model, valueFn){
-    if(!model) return null;
-    let total = 0, any = false;
-    (model.items || []).forEach(it => {
-      const s = computeItemScoreWith(it, valueFn);
-      if(s !== null){ total += s; any = true; }
-    });
-    const cs = computeContribScoreWith(model.contribution, valueFn);
-    if(cs !== null){ total += cs; any = true; }
-    return any ? total : null;
-  }
-  const computeTotalBefore = (model) => computeTotalWith(model, obj => obj.self);
-  const computeTotalAfter = (model) => computeTotalWith(model, obj => effectiveValue(obj));
-  function fmtScore(v){ return (v === null || v === undefined) ? '—' : v.toFixed(1); }
-  function fmtGrade(total){ return total === null ? '—' : gradeFor(total); }
+  // effectiveValue/computeTotalBefore/computeTotalAfter/fmtScore/fmtGrade/
+  // normalizePeriods/gradeFor/escapeHtml all live in scoring.js now.
 
   // Fixed display order (roster order, not alphabetical). Anyone not in this
   // list is pushed to the end rather than making the list skip/gap.

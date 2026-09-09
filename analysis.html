@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>評価シート 分析</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="scoring.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+
+  :root{
+    --paper:#f5f4f0;
+    --surface:#ffffff;
+    --ink:#23262b;
+    --muted:#6d756f;
+    --line:#d8dbd6;
+    --accent:#0e7c86;
+    --accent-ink:#ffffff;
+    --panel:#23282c;
+    --panel-ink:#f3f2ee;
+    --result:#f6d9a0;
+    --result-ink:#5a4416;
+    --note:#a8433e;
+    --shadow:rgba(30,32,28,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#15181a;
+      --surface:#1c2023;
+      --ink:#e9e7e2;
+      --muted:#9aa39d;
+      --line:#343a3d;
+      --accent:#2bb6c2;
+      --accent-ink:#07181b;
+      --panel:#0e1113;
+      --panel-ink:#ececeb;
+      --result:#4d3d1d;
+      --result-ink:#f3d999;
+      --note:#e08882;
+      --shadow:rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#15181a;
+    --surface:#1c2023;
+    --ink:#e9e7e2;
+    --muted:#9aa39d;
+    --line:#343a3d;
+    --accent:#2bb6c2;
+    --accent-ink:#07181b;
+    --panel:#0e1113;
+    --panel-ink:#ececeb;
+    --result:#4d3d1d;
+    --result-ink:#f3d999;
+    --note:#e08882;
+    --shadow:rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  }
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 20px;
+    background:var(--panel);
+    color:var(--panel-ink);
+    font-size:13px;
+  }
+  .topbar .brand{ font-weight:900; letter-spacing:.02em; }
+  .topbar .right{ display:flex; align-items:center; gap:14px; }
+  .topbar a, .topbar button.link{
+    color:var(--panel-ink); opacity:.85; text-decoration:none;
+    background:none; border:none; font-family:inherit; font-size:13px; cursor:pointer; padding:0;
+  }
+  .topbar a:hover, .topbar button.link:hover{ opacity:1; text-decoration:underline; }
+
+  .center-loading{
+    min-height:60vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font-size:13px;
+  }
+  .center-loading[hidden]{ display:none; }
+
+  .page{
+    max-width:1200px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    padding:24px 24px 64px;
+  }
+  .page h1{ font-size:22px; font-weight:900; margin:0; }
+
+  .period-switch{ display:flex; gap:6px; }
+  .period-btn{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:700;
+    padding:8px 18px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:var(--surface);
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .period-btn.active{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+
+  .cards{
+    display:grid;
+    grid-template-columns:1.3fr 1fr;
+    gap:20px;
+  }
+  @media (max-width: 900px){ .cards{ grid-template-columns:1fr; } }
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:0 6px 20px var(--shadow);
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .card h2{ font-size:15px; font-weight:700; margin:0; }
+  .card .sub{ font-size:12px; color:var(--muted); margin:-8px 0 0; }
+  .chart-legend{ display:flex; gap:16px; font-size:12px; color:var(--muted); }
+  .chart-legend .swatch{
+    display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle;
+  }
+
+  svg text{ font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif; }
+  .axis-line{ stroke:var(--ink); stroke-width:1; opacity:.6; }
+  .grid-line{ stroke:var(--line); stroke-width:1; }
+  .diagonal-line{ stroke:var(--muted); stroke-width:1.5; stroke-dasharray:4 4; }
+  .axis-label{ fill:var(--muted); font-size:11px; }
+  .tick-label{ fill:var(--muted); font-size:10px; }
+  .scatter-point{ stroke:var(--surface); stroke-width:1; cursor:default; }
+  .scatter-point.improved{ fill:var(--accent); }
+  .scatter-point.declined{ fill:var(--note); }
+  .scatter-point.same{ fill:var(--muted); }
+  .bar-before{ fill:var(--muted); opacity:.55; }
+  .bar-after{ fill:var(--accent); }
+  .bar-count-label{ fill:var(--ink); font-size:11px; font-weight:700; }
+
+  .footnote{ font-size:11.5px; color:var(--muted); line-height:1.6; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">評価シート ｜ 分析</span>
+    <div class="right">
+      <span id="user-email"></span>
+      <a href="sheet.html">サマリーに戻る</a>
+      <a href="admin.html" id="admin-link" hidden>ユーザー承認</a>
+      <button class="link" id="logout-btn">ログアウト</button>
+    </div>
+  </div>
+
+  <div class="center-loading" id="loading">読み込み中...</div>
+
+  <div class="page" id="page-content" hidden>
+    <h1>分析</h1>
+    <div class="period-switch" id="period-switch">
+      <button class="period-btn active" type="button" data-period="first_half">上期</button>
+      <button class="period-btn" type="button" data-period="second_half">下期</button>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <h2>修正前 → 修正後 散布図</h2>
+        <p class="sub">横軸：修正前スコア（Before）／縦軸：修正後スコア（After）。点線は「変化なし」の基準線です。</p>
+        <div class="chart-legend">
+          <span><span class="swatch" style="background:var(--accent);"></span>上昇</span>
+          <span><span class="swatch" style="background:var(--note);"></span>低下</span>
+          <span><span class="swatch" style="background:var(--muted);"></span>変化なし</span>
+        </div>
+        <div id="scatter-wrap"></div>
+      </div>
+
+      <div class="card">
+        <h2>ランクごとの人数サマリ</h2>
+        <p class="sub">評価ランク（S〜E）ごとの人数。修正前／修正後で比較します。</p>
+        <div class="chart-legend">
+          <span><span class="swatch" style="background:var(--muted); opacity:.55;"></span>修正前</span>
+          <span><span class="swatch" style="background:var(--accent);"></span>修正後</span>
+        </div>
+        <div id="rank-bar-wrap"></div>
+      </div>
+    </div>
+
+    <p class="footnote" id="analysis-note"></p>
+  </div>
+
+<script>
+(function(){
+  let period = 'first_half';
+  let allPeople = [];
+
+  function computeAll(){
+    return allPeople.map(p => {
+      const model = normalizePeriods(p.data)[period];
+      return {
+        name: p.name,
+        before: computeTotalBefore(model),
+        after: computeTotalAfter(model)
+      };
+    }).filter(r => r.before !== null || r.after !== null);
+  }
+
+  function renderScatter(rows){
+    const wrap = document.getElementById('scatter-wrap');
+    const pts = rows.filter(r => r.before !== null && r.after !== null);
+    if(pts.length === 0){
+      wrap.innerHTML = '<p class="footnote">表示できるデータがありません（修正前・修正後の両方が入力されている人がいません）。</p>';
+      return;
+    }
+    const maxVal = Math.max(110, ...pts.map(r => Math.max(r.before, r.after)));
+    const domainMax = Math.ceil(maxVal / 20) * 20;
+
+    const W = 480, H = 420;
+    const padL = 44, padR = 16, padT = 16, padB = 40;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const sx = v => padL + (v / domainMax) * plotW;
+    const sy = v => padT + plotH - (v / domainMax) * plotH;
+
+    const ticks = [];
+    for(let v = 0; v <= domainMax; v += 20) ticks.push(v);
+
+    const gridLines = ticks.map(v => `
+      <line class="grid-line" x1="${sx(v)}" y1="${padT}" x2="${sx(v)}" y2="${padT + plotH}"></line>
+      <line class="grid-line" x1="${padL}" y1="${sy(v)}" x2="${padL + plotW}" y2="${sy(v)}"></line>
+      <text class="tick-label" x="${sx(v)}" y="${padT + plotH + 14}" text-anchor="middle">${v}</text>
+      <text class="tick-label" x="${padL - 8}" y="${sy(v) + 3}" text-anchor="end">${v}</text>
+    `).join('');
+
+    const points = pts.map(r => {
+      const diff = r.after - r.before;
+      const cls = diff > 0.05 ? 'improved' : (diff < -0.05 ? 'declined' : 'same');
+      return `<circle class="scatter-point ${cls}" cx="${sx(r.before)}" cy="${sy(r.after)}" r="5">
+        <title>${escapeHtml(r.name)}：${r.before.toFixed(1)} → ${r.after.toFixed(1)}</title>
+      </circle>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto;">
+        ${gridLines}
+        <line class="axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}"></line>
+        <line class="axis-line" x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}"></line>
+        <line class="diagonal-line" x1="${sx(0)}" y1="${sy(0)}" x2="${sx(domainMax)}" y2="${sy(domainMax)}"></line>
+        ${points}
+        <text class="axis-label" x="${padL + plotW / 2}" y="${H - 6}" text-anchor="middle">修正前スコア（Before）</text>
+        <text class="axis-label" x="-${padT + plotH / 2}" y="14" text-anchor="middle" transform="rotate(-90)">修正後スコア（After）</text>
+      </svg>`;
+  }
+
+  function renderRankBars(rows){
+    const wrap = document.getElementById('rank-bar-wrap');
+    const grades = ['S', 'A', 'B', 'C', 'D', 'E'];
+    const beforeCounts = Object.fromEntries(grades.map(g => [g, 0]));
+    const afterCounts = Object.fromEntries(grades.map(g => [g, 0]));
+    rows.forEach(r => {
+      if(r.before !== null) beforeCounts[gradeFor(r.before)]++;
+      if(r.after !== null) afterCounts[gradeFor(r.after)]++;
+    });
+    const maxCount = Math.max(1, ...grades.map(g => Math.max(beforeCounts[g], afterCounts[g])));
+
+    const W = 420, H = 300;
+    const padL = 30, padR = 10, padT = 10, padB = 30;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const groupW = plotW / grades.length;
+    const barW = groupW * 0.32;
+    const sy = v => plotH - (v / maxCount) * plotH;
+
+    const bars = grades.map((g, i) => {
+      const groupX = padL + i * groupW;
+      const bH_before = (beforeCounts[g] / maxCount) * plotH;
+      const bH_after = (afterCounts[g] / maxCount) * plotH;
+      const xBefore = groupX + groupW / 2 - barW - 3;
+      const xAfter = groupX + groupW / 2 + 3;
+      return `
+        <rect class="bar-before" x="${xBefore}" y="${padT + plotH - bH_before}" width="${barW}" height="${bH_before}"></rect>
+        <rect class="bar-after" x="${xAfter}" y="${padT + plotH - bH_after}" width="${barW}" height="${bH_after}"></rect>
+        <text class="bar-count-label" x="${xBefore + barW / 2}" y="${padT + plotH - bH_before - 4}" text-anchor="middle">${beforeCounts[g] || ''}</text>
+        <text class="bar-count-label" x="${xAfter + barW / 2}" y="${padT + plotH - bH_after - 4}" text-anchor="middle">${afterCounts[g] || ''}</text>
+        <text class="tick-label" x="${groupX + groupW / 2}" y="${padT + plotH + 16}" text-anchor="middle" style="font-size:12px; font-weight:700;">${g}</text>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto;">
+        <line class="axis-line" x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}"></line>
+        ${bars}
+      </svg>`;
+  }
+
+  function renderAll(){
+    const rows = computeAll();
+    renderScatter(rows);
+    renderRankBars(rows);
+    document.getElementById('analysis-note').textContent =
+      `対象：${rows.length}名（このシートに評価データが入力されている人のみ集計しています）`;
+  }
+
+  document.getElementById('period-switch').addEventListener('click', (e) => {
+    const btn = e.target.closest('.period-btn');
+    if(!btn) return;
+    period = btn.dataset.period;
+    document.querySelectorAll('#period-switch .period-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderAll();
+  });
+
+  window.__initAnalysis = async function(){
+    const { data, error } = await sb.from('eval_sheets').select('id,name,data');
+    if(error){
+      document.getElementById('analysis-note').textContent = `読み込みに失敗しました：${error.message}`;
+      return;
+    }
+    allPeople = data;
+    renderAll();
+  };
+})();
+</script>
+<script>
+  (async () => {
+    const result = await requireAuth('app');
+    if(!result) return;
+    document.getElementById('user-email').textContent = result.user.email;
+    if(result.profile.is_admin) document.getElementById('admin-link').hidden = false;
+    document.getElementById('loading').hidden = true;
+    document.getElementById('page-content').hidden = false;
+    await window.__initAnalysis();
+  })();
+  document.getElementById('logout-btn').addEventListener('click', signOut);
+</script>
+</body>
+</html>
