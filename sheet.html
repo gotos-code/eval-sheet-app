@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>評価シート</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+
+  :root{
+    --paper:#f5f4f0;
+    --surface:#ffffff;
+    --ink:#23262b;
+    --muted:#6d756f;
+    --line:#d8dbd6;
+    --accent:#0e7c86;
+    --accent-ink:#ffffff;
+    --panel:#23282c;
+    --panel-ink:#f3f2ee;
+    --result:#f6d9a0;
+    --result-ink:#5a4416;
+    --self:#f0c9c2;
+    --self-ink:#5a2c24;
+    --eval:#bcdce6;
+    --eval-ink:#153a44;
+    --note:#a8433e;
+    --input-bg:#ffffff;
+    --shadow:rgba(30,32,28,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#15181a;
+      --surface:#1c2023;
+      --ink:#e9e7e2;
+      --muted:#9aa39d;
+      --line:#343a3d;
+      --accent:#2bb6c2;
+      --accent-ink:#07181b;
+      --panel:#0e1113;
+      --panel-ink:#ececeb;
+      --result:#4d3d1d;
+      --result-ink:#f3d999;
+      --self:#4a2b28;
+      --self-ink:#f0c3bc;
+      --eval:#1e3a44;
+      --eval-ink:#bfe3ec;
+      --note:#e08882;
+      --input-bg:#22272a;
+      --shadow:rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#15181a;
+    --surface:#1c2023;
+    --ink:#e9e7e2;
+    --muted:#9aa39d;
+    --line:#343a3d;
+    --accent:#2bb6c2;
+    --accent-ink:#07181b;
+    --panel:#0e1113;
+    --panel-ink:#ececeb;
+    --result:#4d3d1d;
+    --result-ink:#f3d999;
+    --self:#4a2b28;
+    --self-ink:#f0c3bc;
+    --eval:#1e3a44;
+    --eval-ink:#bfe3ec;
+    --note:#e08882;
+    --input-bg:#22272a;
+    --shadow:rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  }
+
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 20px;
+    background:var(--panel);
+    color:var(--panel-ink);
+    font-size:13px;
+  }
+  .topbar .brand{ font-weight:900; letter-spacing:.02em; }
+  .topbar .right{ display:flex; align-items:center; gap:14px; }
+  .topbar a, .topbar button.link{
+    color:var(--panel-ink); opacity:.85; text-decoration:none;
+    background:none; border:none; font-family:inherit; font-size:13px; cursor:pointer; padding:0;
+  }
+  .topbar a:hover, .topbar button.link:hover{ opacity:1; text-decoration:underline; }
+  .center-loading{
+    min-height:60vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font-size:13px;
+  }
+
+  .page{
+    max-width:1480px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    padding:24px 24px 64px;
+  }
+  .eyebrow{
+    font-size:12px;
+    letter-spacing:.12em;
+    color:var(--muted);
+    text-transform:uppercase;
+    font-weight:500;
+  }
+
+  /* ---------- toolbar ---------- */
+  .toolbar{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .btn-file{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background:var(--accent);
+    color:var(--accent-ink);
+    font-weight:700;
+    font-size:13px;
+    padding:10px 18px;
+    border-radius:8px;
+    cursor:pointer;
+    box-shadow:0 4px 10px var(--shadow);
+    border:none;
+  }
+  .btn-file:hover{ filter:brightness(1.06); }
+  .btn-file input[type="file"]{ display:none; }
+  .btn-reset{
+    background:transparent;
+    color:var(--muted);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:9px 16px;
+    font-size:13px;
+    font-weight:500;
+    font-family:inherit;
+    cursor:pointer;
+  }
+  .btn-reset:hover{ color:var(--ink); border-color:var(--ink); }
+  #import-status{
+    font-size:12.5px;
+    color:var(--muted);
+  }
+  #import-status.error{ color:var(--note); font-weight:700; }
+  #import-status.ok{ color:var(--accent); font-weight:700; }
+
+  /* ---------- header panel ---------- */
+  .header{
+    display:grid;
+    grid-template-columns:1.1fr 1.4fr;
+    gap:16px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:0 6px 20px var(--shadow);
+    overflow:hidden;
+  }
+  .header-title{
+    background:var(--accent);
+    color:var(--accent-ink);
+    padding:26px 28px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:10px;
+  }
+  .header-title h1{
+    margin:0;
+    font-size:26px;
+    font-weight:900;
+    letter-spacing:.02em;
+  }
+  .header-title .period-row{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    font-size:14px;
+    font-weight:500;
+    opacity:.95;
+  }
+  .header-title .period-row input{
+    background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.3);
+    color:var(--accent-ink);
+    border-radius:6px;
+    padding:4px 8px;
+    font-family:inherit;
+    font-weight:700;
+    font-size:13px;
+    font-variant-numeric:tabular-nums;
+    min-width:220px;
+  }
+  .header-title .period-row input::placeholder{ color:rgba(255,255,255,.7); }
+  .header-title .hint{
+    font-size:12px;
+    font-weight:500;
+    opacity:.8;
+    margin-top:4px;
+  }
+
+  .header-info{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--line);
+  }
+  .info-cell{
+    background:var(--surface);
+    padding:12px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .info-cell.dark{
+    background:var(--panel);
+    color:var(--panel-ink);
+  }
+  .info-label{
+    font-size:11px;
+    letter-spacing:.06em;
+    color:var(--muted);
+    font-weight:500;
+  }
+  .info-cell.dark .info-label{ color:var(--panel-ink); opacity:.7; }
+  .info-cell input{
+    border:none;
+    background:transparent;
+    font-family:inherit;
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink);
+    padding:2px 0;
+    border-bottom:1px solid var(--line);
+    width:100%;
+  }
+  .info-cell.dark input{
+    color:var(--panel-ink);
+    border-bottom:1px solid rgba(255,255,255,.25);
+  }
+  .info-cell input:focus{ outline:none; border-color:var(--accent); }
+  .result-cell{
+    grid-column:1 / -1;
+    background:var(--panel);
+    color:var(--panel-ink);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 16px;
+  }
+  .result-cell .score-wrap{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  .result-cell .score{
+    font-size:22px;
+    font-weight:900;
+    font-variant-numeric:tabular-nums;
+    color:var(--result);
+  }
+  .grade-badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:30px;
+    padding:2px 10px;
+    border-radius:999px;
+    background:var(--result);
+    color:var(--result-ink);
+    font-weight:900;
+    font-size:14px;
+  }
+
+  /* ---------- table ---------- */
+  .table-wrap{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:0 6px 20px var(--shadow);
+    overflow-x:auto;
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    min-width:1440px;
+    font-size:13px;
+  }
+  th,td{
+    border:1px solid var(--line);
+    padding:8px 10px;
+    vertical-align:middle;
+    text-align:center;
+  }
+  thead th{
+    background:var(--panel);
+    color:var(--panel-ink);
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:.03em;
+    padding:10px;
+  }
+  th.col-item{ min-width:150px; }
+  td.col-item{
+    text-align:left;
+    font-weight:700;
+    background:var(--surface);
+    white-space:pre-line;
+    min-width:150px;
+  }
+  td.col-weight{
+    font-weight:900;
+    font-variant-numeric:tabular-nums;
+    font-size:15px;
+    color:var(--accent);
+    min-width:56px;
+  }
+  td.col-weight.no-weight{ color:var(--muted); font-size:12px; font-weight:500; }
+  td.col-criteria{
+    text-align:left;
+    line-height:1.55;
+    min-width:240px;
+    max-width:320px;
+    font-size:12.5px;
+    white-space:pre-line;
+  }
+  th.scale-group{ background:var(--panel); }
+  th.scale-num{
+    background:var(--panel);
+    min-width:100px;
+  }
+  td.scale{
+    font-size:11.5px;
+    line-height:1.45;
+    color:var(--muted);
+    min-width:100px;
+    white-space:pre-line;
+  }
+  td.scale.tier-hit{
+    background:var(--result);
+    color:var(--result-ink);
+    font-weight:700;
+  }
+  td.col-result{
+    background:var(--result);
+    min-width:180px;
+    max-width:260px;
+  }
+  td.col-result textarea{
+    width:100%;
+    min-height:64px;
+    max-height:220px;
+    resize:vertical;
+    text-align:left;
+    font-family:inherit;
+    font-size:12px;
+    line-height:1.5;
+    color:var(--result-ink);
+    font-weight:600;
+    background:transparent;
+    border:1px solid rgba(0,0,0,.12);
+    border-radius:6px;
+    padding:6px 8px;
+  }
+  th.grp-self{ background:var(--self); color:var(--self-ink); }
+  th.grp-eval{ background:var(--eval); color:var(--eval-ink); }
+  td.col-self{ background:color-mix(in srgb, var(--self) 30%, var(--surface)); }
+  td.col-eval{ background:color-mix(in srgb, var(--eval) 28%, var(--surface)); }
+  td.col-score{
+    font-weight:900;
+    font-variant-numeric:tabular-nums;
+    font-size:14px;
+    min-width:70px;
+  }
+  .mbo-tab{
+    writing-mode:vertical-rl;
+    background:var(--panel);
+    color:var(--panel-ink);
+    font-weight:700;
+    letter-spacing:.15em;
+    font-size:12px;
+    padding:14px 8px;
+  }
+
+  select, input[type="number"], input[type="text"]{
+    font-family:inherit;
+    border:1px solid var(--line);
+    background:var(--input-bg);
+    color:var(--ink);
+    border-radius:6px;
+    padding:6px 4px;
+    font-size:13px;
+    width:100%;
+  }
+  select:focus, input:focus, textarea:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+
+  .comment-block{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:8px;
+  }
+  .comment-block textarea{
+    grid-column:span 1;
+    font-family:inherit;
+    font-size:12px;
+    border:1px solid var(--line);
+    background:var(--input-bg);
+    color:var(--ink);
+    border-radius:6px;
+    padding:6px 8px;
+    resize:vertical;
+    min-height:48px;
+    width:100%;
+  }
+  .comment-block textarea.wide{ grid-column:1 / -1; }
+  .comment-label{
+    font-size:10.5px;
+    color:var(--muted);
+    font-weight:500;
+    display:block;
+    margin-bottom:2px;
+  }
+
+  tr.total td{
+    background:var(--panel);
+    color:var(--panel-ink);
+    font-weight:900;
+    font-size:15px;
+    padding:12px;
+  }
+  tr.total .total-score{
+    font-size:20px;
+    color:var(--result);
+    font-variant-numeric:tabular-nums;
+  }
+
+  .footnote{
+    font-size:11.5px;
+    color:var(--muted);
+    line-height:1.6;
+    padding:2px 4px;
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">評価シート</span>
+    <div class="right">
+      <span id="user-email"></span>
+      <a href="admin.html" id="admin-link" hidden>ユーザー承認</a>
+      <button class="link" id="logout-btn">ログアウト</button>
+    </div>
+  </div>
+
+  <div class="center-loading" id="loading">読み込み中...</div>
+
+  <div class="page" id="page-content" hidden>
+    <div class="toolbar">
+      <label class="btn-file">
+        📥 Excelをインポート
+        <input type="file" id="file-input" accept=".xlsx,.xls">
+      </label>
+      <button class="btn-reset" id="reset-btn" type="button">サンプルに戻す</button>
+      <span id="import-status">まだファイルは読み込まれていません（サンプルデータを表示中）</span>
+    </div>
+
+    <div class="header">
+      <div class="header-title">
+        <span class="eyebrow">評価シート</span>
+        <h1 id="sheet-title">評価シート(下期修正用)</h1>
+        <div class="period-row">評価期間　<input type="text" id="f-period" placeholder="評価期間"></div>
+        <div class="hint">被評価者入力欄　─ 入力欄セルを編集してください</div>
+      </div>
+      <div class="header-info">
+        <div class="info-cell">
+          <span class="info-label">所属</span>
+          <input type="text" id="f-dept" placeholder="部署名を入力">
+        </div>
+        <div class="info-cell">
+          <span class="info-label">役職 / グレード</span>
+          <input type="text" id="f-grade" placeholder="例）主任 / G3">
+        </div>
+        <div class="info-cell">
+          <span class="info-label">氏名</span>
+          <input type="text" id="f-name" placeholder="氏名を入力">
+        </div>
+        <div class="info-cell dark">
+          <span class="info-label">部門</span>
+          <input type="text" id="f-org" placeholder="部門名">
+        </div>
+        <div class="info-cell dark">
+          <span class="info-label">一次評価者</span>
+          <input type="text" id="f-first-evaluator" placeholder="一次評価者">
+        </div>
+        <div class="info-cell dark">
+          <span class="info-label">最終評価者</span>
+          <input type="text" id="f-final-evaluator" placeholder="最終評価者">
+        </div>
+        <div class="result-cell">
+          <span class="info-label">評価結果（合計スコア）</span>
+          <div class="score-wrap">
+            <span class="score" id="total-score">0.0</span>
+            <span class="grade-badge" id="total-grade">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="eval-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="col-item">項目</th>
+            <th>ウエイト</th>
+            <th>評価基準</th>
+            <th>結果</th>
+            <th class="scale-group" id="scale-group-header" colspan="6">評価尺度</th>
+            <th class="grp-self">被評価者</th>
+            <th class="grp-eval">一次評価者</th>
+            <th class="grp-eval">最終評価者</th>
+            <th>スコア</th>
+          </tr>
+          <tr id="scale-nums-row">
+            <th colspan="5"></th>
+            <th class="scale-num">1</th>
+            <th class="scale-num">2</th>
+            <th class="scale-num">3</th>
+            <th class="scale-num">4</th>
+            <th class="scale-num">5</th>
+            <th class="scale-num">6</th>
+            <th colspan="4"></th>
+          </tr>
+        </thead>
+        <tbody id="rows-tbody">
+        </tbody>
+        <tfoot>
+          <tr class="total">
+            <td></td>
+            <td class="col-item">TOTAL</td>
+            <td id="total-weight-cell">0</td>
+            <td id="total-colspan-cell" colspan="11"></td>
+            <td class="total-score" id="total-score-cell">0.0</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <p class="footnote">スコアは各行の「最終評価者」欄の尺度をもとに、ウエイト×(尺度÷満点)×(100÷評価項目ウエイト合計) で自動計算しています（貢献ポイント行は入力値をそのまま加算）。評価結果の等級は合計スコアが 80以上:S／70以上:A／60以上:B／50以上:C／40以上:D／40未満:E で判定しています。ウエイトのない行（KPI達成など）は参考指標として扱い、合計には含まれません。</p>
+  </div>
+
+<script>
+(function(){
+  const escapeHtml = (s) => String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+  const SAMPLE_MODEL = {
+    meta:{
+      dept:'', grade:'', name:'',
+      org:'セールスオペレーション部',
+      firstEvaluator:'樋口社長', finalEvaluator:'樋口社長',
+      period:'2026年9月〜2027年2月'
+    },
+    items:[
+      { name:'全体売上\n└通常案件、セラーの合算', weight:20, maxPoint:6,
+        criteria:'通常案件、セラーの売上を¥━━━━━━', note:'変更なし',
+        tiers:['75%未満','75%以上88%未満','88%以上100%未満','100%以上111%未満','111%以上120%未満','120%以上'],
+        self:null, first:null, final:null },
+      { name:'担当案件売り上げ', weight:40, maxPoint:6,
+        criteria:'ヨミ表の目標金額に対する達成率\n目標金額：※各自記載', note:'変更なし',
+        tiers:['75%未満','75%以上88%未満','88%以上100%未満','100%以上111%未満','111%以上120%未満','120%以上'],
+        self:null, first:null, final:null },
+      { name:'粗利率\n（売上と人件費で計算）', weight:20, maxPoint:6,
+        criteria:'SO部の粗利率を平均30%以上とする\n※全体の粗利率は難易度高いかも？自評価？積み上げ成果？（青木）', note:'変更なし',
+        tiers:['25.5%未満','25.5%以上','28%以上','目標達成','32%以上','35%以上'],
+        self:null, first:null, final:null },
+      { name:'KPI達成', weight:null, maxPoint:6,
+        criteria:'→KPIに対しての達成率（担当案件における）\n※KPIへの動きはある？（青木）', note:'',
+        tiers:['90%未満','90%以上〜95%未満','95%以上〜100%未満','100%以上〜110%未満','110%以上〜120%未満','120%以上'],
+        self:null, first:null, final:null },
+      { name:'休眠顧客からの売り上げ創出', weight:20, maxPoint:6,
+        criteria:'接点を持った、商談化した、受注した、金額', note:'後藤さん（尺度）',
+        tiers:['CS活動ができ…','商談化案件あり','確度（％）×見込 50万','確度（％）×見込 100万','確度（％）×見込 150万','確度（％）×見込 200万'],
+        self:null, first:null, final:null },
+    ],
+    contribution:{
+      weight:10,
+      criteria:'MBO評価以外の貢献度について最大10ptで評価',
+      comments:{ self:'', first:'', final:'' },
+      self:null, first:null, final:null
+    }
+  };
+
+  let currentModel = null;
+  let subtotalWeight = 1;
+
+  function gradeFor(total){
+    if(total >= 80) return 'S';
+    if(total >= 70) return 'A';
+    if(total >= 60) return 'B';
+    if(total >= 50) return 'C';
+    if(total >= 40) return 'D';
+    return 'E';
+  }
+
+  function tierOptions(selected, tierCount){
+    let out = `<option value="">未入力</option>`;
+    for(let i=1;i<=tierCount;i++){
+      out += `<option value="${i}"${Number(selected)===i ? ' selected' : ''}>${i}</option>`;
+    }
+    return out;
+  }
+
+  function itemRowHtml(it, idx, totalItems){
+    const tierCount = it.tiers.length;
+    const hasWeight = it.weight !== null && it.weight !== undefined;
+    const mboCell = idx === 0
+      ? `<td class="mbo-tab" rowspan="${totalItems + 1}">MBO</td>`
+      : '';
+    const scaleCells = it.tiers.map(desc => `<td class="scale">${escapeHtml(desc)}</td>`).join('');
+    return `
+      <tr class="item-row" data-weight="${hasWeight ? it.weight : 0}" data-has-weight="${hasWeight ? 1 : 0}" data-max="${it.maxPoint || tierCount}">
+        ${mboCell}
+        <td class="col-item">${escapeHtml(it.name)}</td>
+        <td class="col-weight${hasWeight ? '' : ' no-weight'}">${hasWeight ? it.weight : '参考'}</td>
+        <td class="col-criteria">${escapeHtml(it.criteria)}</td>
+        <td class="col-result"><textarea>${escapeHtml(it.note)}</textarea></td>
+        ${scaleCells}
+        <td class="col-self"><select class="tier-select self">${tierOptions(it.self, tierCount)}</select></td>
+        <td class="col-eval"><select class="tier-select first">${tierOptions(it.first, tierCount)}</select></td>
+        <td class="col-eval"><select class="tier-select final">${tierOptions(it.final, tierCount)}</select></td>
+        <td class="col-score">—</td>
+      </tr>`;
+  }
+
+  function contribRowHtml(c, tierCount){
+    return `
+      <tr class="contrib-row" data-weight="${c.weight}">
+        <td class="col-item">貢献ポイント</td>
+        <td class="col-weight">${c.weight}</td>
+        <td class="col-criteria" colspan="${2 + tierCount}">
+          ${escapeHtml(c.criteria)}
+          <div class="comment-block">
+            <div>
+              <span class="comment-label">被評価者コメント</span>
+              <textarea class="comment-self">${escapeHtml(c.comments.self)}</textarea>
+            </div>
+            <div>
+              <span class="comment-label">一次評価者コメント</span>
+              <textarea class="comment-first">${escapeHtml(c.comments.first)}</textarea>
+            </div>
+            <div style="grid-column:1 / -1;">
+              <span class="comment-label">最終評価者コメント</span>
+              <textarea class="comment-final wide">${escapeHtml(c.comments.final)}</textarea>
+            </div>
+          </div>
+        </td>
+        <td class="col-self"><input type="number" class="point-input self" min="0" max="${c.weight}" value="${c.self ?? ''}" placeholder="0-${c.weight}"></td>
+        <td class="col-eval"><input type="number" class="point-input first" min="0" max="${c.weight}" value="${c.first ?? ''}" placeholder="0-${c.weight}"></td>
+        <td class="col-eval"><input type="number" class="point-input final" min="0" max="${c.weight}" value="${c.final ?? ''}" placeholder="0-${c.weight}"></td>
+        <td class="col-score">—</td>
+      </tr>`;
+  }
+
+  function updateTierHighlight(row, val){
+    const cells = row.querySelectorAll('td.scale');
+    cells.forEach((cell, i) => cell.classList.toggle('tier-hit', val !== '' && (i + 1) === Number(val)));
+  }
+
+  function recalcAll(){
+    let mboSum = 0;
+    document.querySelectorAll('#rows-tbody tr.item-row').forEach(row => {
+      const hasWeight = row.dataset.hasWeight === '1';
+      const weight = Number(row.dataset.weight);
+      const max = Number(row.dataset.max) || 6;
+      const scoreCell = row.querySelector('.col-score');
+      const finalSel = row.querySelector('select.tier-select.final');
+      updateTierHighlight(row, finalSel.value);
+      if(!hasWeight){ scoreCell.textContent = '参考'; return; }
+      if(finalSel.value === ''){ scoreCell.textContent = '—'; return; }
+      const val = weight * (Number(finalSel.value) / max) * (100 / subtotalWeight);
+      scoreCell.textContent = val.toFixed(1);
+      mboSum += val;
+    });
+
+    let contribScore = 0;
+    const contribRow = document.querySelector('#rows-tbody tr.contrib-row');
+    if(contribRow){
+      const finalInput = contribRow.querySelector('input.point-input.final');
+      const scoreCell = contribRow.querySelector('.col-score');
+      if(finalInput.value === ''){ scoreCell.textContent = '—'; }
+      else {
+        contribScore = Number(finalInput.value);
+        scoreCell.textContent = contribScore.toFixed(1);
+      }
+    }
+
+    const total = mboSum + contribScore;
+    document.getElementById('total-score').textContent = total.toFixed(1);
+    document.getElementById('total-score-cell').textContent = total.toFixed(1);
+    document.getElementById('total-grade').textContent = gradeFor(total);
+  }
+
+  function attachHandlers(){
+    document.querySelectorAll('#rows-tbody select, #rows-tbody input').forEach(el => {
+      el.addEventListener('change', recalcAll);
+      el.addEventListener('input', recalcAll);
+    });
+  }
+
+  function setMeta(model){
+    document.getElementById('f-dept').value = model.meta.dept || '';
+    document.getElementById('f-grade').value = model.meta.grade || '';
+    document.getElementById('f-name').value = model.meta.name || '';
+    document.getElementById('f-org').value = model.meta.org || '';
+    document.getElementById('f-first-evaluator').value = model.meta.firstEvaluator || '';
+    document.getElementById('f-final-evaluator').value = model.meta.finalEvaluator || '';
+    document.getElementById('f-period').value = model.meta.period || '';
+  }
+
+  function renderModel(model){
+    currentModel = model;
+    setMeta(model);
+
+    const tierCount = (model.items[0] && model.items[0].tiers.length) || 6;
+    document.getElementById('scale-group-header').setAttribute('colspan', tierCount);
+    document.getElementById('total-colspan-cell').setAttribute('colspan', 5 + tierCount);
+    const numsRow = document.getElementById('scale-nums-row');
+    numsRow.innerHTML = '<th colspan="5"></th>' +
+      Array.from({length: tierCount}, (_, i) => `<th class="scale-num">${i + 1}</th>`).join('') +
+      '<th colspan="4"></th>';
+
+    let html = '';
+    let sw = 0;
+    model.items.forEach((it, idx) => {
+      if(it.weight !== null && it.weight !== undefined) sw += it.weight;
+      html += itemRowHtml(it, idx, model.items.length);
+    });
+    if(model.contribution) html += contribRowHtml(model.contribution, tierCount);
+    document.getElementById('rows-tbody').innerHTML = html;
+
+    subtotalWeight = sw || 1;
+    const totalWeight = sw + (model.contribution ? model.contribution.weight : 0);
+    document.getElementById('total-weight-cell').textContent = totalWeight;
+
+    attachHandlers();
+    recalcAll();
+  }
+
+  /* ---------- xlsx import ---------- */
+  function cellAt(ws, r, c){
+    const addr = XLSX.utils.encode_cell({ r, c });
+    const cell = ws[addr];
+    if(!cell || cell.t === 'e') return null;
+    if(typeof cell.v === 'string' && (cell.v.startsWith('=') || cell.v.startsWith('#'))) return null;
+    return cell.v;
+  }
+  function mergeEndCol(merges, r, c){
+    for(const m of merges){ if(m.s.r === r && m.s.c === c) return m.e.c; }
+    return c;
+  }
+  function valueAfterLabel(ws, merges, r, labelCol){
+    const labelEnd = mergeEndCol(merges, r, labelCol);
+    return cellAt(ws, r, labelEnd + 1);
+  }
+  function textAt(ws, r, c){
+    const v = cellAt(ws, r, c);
+    return (v === null || v === undefined) ? '' : String(v).trim();
+  }
+  function normTier(v){
+    if(v === null || v === undefined || v === '' || v === '未入力') return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  }
+
+  function parseWorkbook(workbook){
+    const sheetName = workbook.SheetNames.find(n => n.indexOf('評価') >= 0) || workbook.SheetNames[0];
+    const ws = workbook.Sheets[sheetName];
+    if(!ws['!ref']) throw new Error('シートにデータが見つかりません');
+    const ref = XLSX.utils.decode_range(ws['!ref']);
+    const merges = ws['!merges'] || [];
+
+    let headerRow = -1;
+    let col = {};
+    for(let r = ref.s.r; r <= ref.e.r; r++){
+      for(let c = ref.s.c; c <= ref.e.c; c++){
+        if(textAt(ws, r, c) === '項目'){ headerRow = r; col.item = c; }
+      }
+      if(headerRow >= 0) break;
+    }
+    if(headerRow < 0) throw new Error('「項目」列のヘッダーが見つかりませんでした。テンプレート形式を確認してください。');
+
+    for(let c = ref.s.c; c <= ref.e.c; c++){
+      const v = textAt(ws, headerRow, c);
+      if(v === 'ウエイト') col.weight = c;
+      if(v === '評価基準') col.criteria = c;
+      if(v === '結果') col.result = c;
+      if(v === '評価尺度') col.scaleLabel = c;
+      if(v === '被評価者') col.self = c;
+      if(v === '一次評価者') col.first = c;
+      if(v === '最終評価者') col.final = c;
+      if(v === '満点') col.maxPoint = c;
+      if(v === 'スコア') col.score = c;
+    }
+    ['weight','criteria','result','scaleLabel','self','first','final','score'].forEach(k => {
+      if(col[k] === undefined) throw new Error(`「${k}」に対応する列が見つかりませんでした。`);
+    });
+
+    let scaleStart = col.scaleLabel, scaleEnd = col.scaleLabel;
+    merges.forEach(m => {
+      if(m.s.r === headerRow && m.s.c <= col.scaleLabel && m.e.c >= col.scaleLabel){
+        scaleStart = m.s.c; scaleEnd = m.e.c;
+      }
+    });
+
+    const groupCol = Math.max(ref.s.c, col.item - 2);
+
+    const meta = { dept:'', grade:'', name:'', org:'', firstEvaluator:'', finalEvaluator:'', period:'' };
+    function asStr(v){ return (v === null || v === undefined) ? '' : String(v); }
+    for(let r = ref.s.r; r < headerRow; r++){
+      for(let c = ref.s.c; c <= ref.e.c; c++){
+        const v = textAt(ws, r, c);
+        if(v === '所属') meta.dept = asStr(valueAfterLabel(ws, merges, r, c));
+        if(v === '役職/グレード' || v === '役職／グレード') meta.grade = asStr(valueAfterLabel(ws, merges, r, c));
+        if(v === '氏名') meta.name = asStr(valueAfterLabel(ws, merges, r, c));
+        if(v === '一次評価者') meta.firstEvaluator = asStr(valueAfterLabel(ws, merges, r, c));
+        if(v === '最終評価者') meta.finalEvaluator = asStr(valueAfterLabel(ws, merges, r, c));
+        if(v === '【評価期間】' || v === '評価期間') meta.period = asStr(valueAfterLabel(ws, merges, r, c));
+      }
+    }
+    meta.org = 'セールスオペレーション部';
+
+    const items = [];
+    let contribution = null;
+    let r = headerRow + 1;
+    while(r <= ref.e.r){
+      const groupVal = textAt(ws, r, groupCol);
+      if(groupVal.indexOf('貢献') >= 0){
+        contribution = {
+          weight: Number(cellAt(ws, r, col.weight)) || 0,
+          criteria: textAt(ws, r, col.criteria),
+          comments:{
+            self: textAt(ws, r + 1, col.result),
+            first: textAt(ws, r + 1, scaleStart),
+            final: textAt(ws, r + 3, scaleStart)
+          },
+          self: normTier(cellAt(ws, r, col.self)),
+          first: normTier(cellAt(ws, r, col.first)),
+          final: normTier(cellAt(ws, r, col.final))
+        };
+        break;
+      }
+      if(groupVal === 'TOTAL') break;
+
+      const name = textAt(ws, r, col.item);
+      const weightVal = cellAt(ws, r, col.weight);
+      const tierNum1 = cellAt(ws, r, scaleStart);
+      if((name || (weightVal !== null && weightVal !== undefined && weightVal !== '')) &&
+         (Number(tierNum1) === 1)){
+        const tiers = [];
+        for(let c = scaleStart; c <= scaleEnd; c++){
+          tiers.push(textAt(ws, r + 1, c));
+        }
+        const maxPointVal = col.maxPoint !== undefined ? Number(cellAt(ws, r, col.maxPoint)) : null;
+        items.push({
+          name: name || '(項目名未設定)',
+          weight: (weightVal === null || weightVal === undefined || weightVal === '') ? null : Number(weightVal),
+          maxPoint: maxPointVal || tiers.length,
+          criteria: textAt(ws, r, col.criteria),
+          note: textAt(ws, r, col.result),
+          tiers,
+          self: normTier(cellAt(ws, r, col.self)),
+          first: normTier(cellAt(ws, r, col.first)),
+          final: normTier(cellAt(ws, r, col.final))
+        });
+        r += 2;
+        continue;
+      }
+      r++;
+    }
+
+    if(items.length === 0) throw new Error('評価項目の行を認識できませんでした。');
+
+    return { meta, items, contribution };
+  }
+
+  const fileInput = document.getElementById('file-input');
+  const statusEl = document.getElementById('import-status');
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try{
+        const data = new Uint8Array(ev.target.result);
+        const workbook = XLSX.read(data, { type:'array' });
+        const model = parseWorkbook(workbook);
+        renderModel(model);
+        statusEl.textContent = `「${file.name}」を読み込み、反映しました（項目 ${model.items.length}件）`;
+        statusEl.className = 'ok';
+      }catch(err){
+        statusEl.textContent = `読み込みに失敗しました：${err.message}`;
+        statusEl.className = 'error';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    fileInput.value = '';
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    renderModel(JSON.parse(JSON.stringify(SAMPLE_MODEL)));
+    statusEl.textContent = 'サンプルデータを表示中です';
+    statusEl.className = '';
+  });
+
+  const STORAGE_KEY = 'eval-sheet-draft-meta-v1';
+  ['f-dept','f-grade','f-name'].forEach(id => {
+    const el = document.getElementById(id);
+    try{
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      if(saved[id]) el.value = saved[id];
+    }catch(e){}
+    el.addEventListener('input', () => {
+      try{
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        saved[id] = el.value;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+      }catch(e){}
+    });
+  });
+
+  window.__initSheet = function(){
+    renderModel(JSON.parse(JSON.stringify(SAMPLE_MODEL)));
+  };
+})();
+</script>
+<script>
+  (async () => {
+    const result = await requireAuth('app');
+    if(!result) return;
+    document.getElementById('user-email').textContent = result.user.email;
+    if(result.profile.is_admin) document.getElementById('admin-link').hidden = false;
+    document.getElementById('loading').hidden = true;
+    document.getElementById('page-content').hidden = false;
+    window.__initSheet();
+  })();
+  document.getElementById('logout-btn').addEventListener('click', signOut);
+</script>
+</body>
+</html>

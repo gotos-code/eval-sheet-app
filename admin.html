@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ユーザー承認 - 評価シート</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">評価シート ｜ 管理者</span>
+    <div class="right">
+      <a href="sheet.html">シートに戻る</a>
+      <button class="link" id="logout-btn">ログアウト</button>
+    </div>
+  </div>
+
+  <div class="admin-wrap">
+    <h1>ユーザー承認管理</h1>
+    <div id="msg-area"></div>
+    <table class="admin-table" id="users-table">
+      <thead>
+        <tr>
+          <th>氏名</th>
+          <th>メールアドレス</th>
+          <th>登録日</th>
+          <th>承認</th>
+          <th>管理者</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="users-body">
+        <tr><td colspan="6">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let me = null;
+
+    async function loadUsers(){
+      const { data, error } = await sb
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending:false });
+
+      const body = document.getElementById('users-body');
+      if(error){
+        body.innerHTML = `<tr><td colspan="6">読み込みに失敗しました：${error.message}</td></tr>`;
+        return;
+      }
+      body.innerHTML = data.map(p => `
+        <tr data-id="${p.id}">
+          <td>${escapeHtml((p.last_name||'') + ' ' + (p.first_name||''))}</td>
+          <td>${escapeHtml(p.email||'')}</td>
+          <td>${new Date(p.created_at).toLocaleDateString('ja-JP')}</td>
+          <td><span class="pill ${p.approved ? 'yes' : 'no'}">${p.approved ? '承認済み' : '未承認'}</span></td>
+          <td><span class="pill ${p.is_admin ? 'yes' : 'no'}">${p.is_admin ? '管理者' : '一般'}</span></td>
+          <td>
+            <button data-action="toggle-approved">${p.approved ? '承認を取消す' : '承認する'}</button>
+            <button data-action="toggle-admin" ${p.id === me.id ? 'disabled title="自分自身は変更できません"' : ''}>${p.is_admin ? '管理者を解除' : '管理者にする'}</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    function escapeHtml(s){
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    document.getElementById('users-body').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if(!btn || btn.disabled) return;
+      const row = btn.closest('tr');
+      const id = row.dataset.id;
+      const msgArea = document.getElementById('msg-area');
+      msgArea.innerHTML = '';
+
+      let update = {};
+      if(btn.dataset.action === 'toggle-approved'){
+        const isApproved = row.querySelector('.pill.yes')?.textContent.includes('承認済み');
+        update = { approved: !isApproved };
+      } else if(btn.dataset.action === 'toggle-admin'){
+        const pills = row.querySelectorAll('.pill');
+        const isAdmin = pills[1].textContent.includes('管理者');
+        update = { is_admin: !isAdmin };
+      }
+
+      const { error } = await sb.from('profiles').update(update).eq('id', id);
+      if(error){
+        msgArea.innerHTML = `<div class="msg error">更新に失敗しました：${error.message}</div>`;
+        return;
+      }
+      loadUsers();
+    });
+
+    (async () => {
+      const result = await requireAuth('admin');
+      if(!result) return;
+      me = result.user;
+      await loadUsers();
+    })();
+
+    document.getElementById('logout-btn').addEventListener('click', signOut);
+  </script>
+</body>
+</html>

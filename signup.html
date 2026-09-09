@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新規登録 - 評価シート</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="auth-shell">
+    <form class="auth-card" id="signup-form">
+      <span class="eyebrow">評価シート</span>
+      <h1>新規登録</h1>
+      <div id="msg-area"></div>
+      <div class="name-row">
+        <div class="field">
+          <label for="last-name">姓</label>
+          <input type="text" id="last-name" required>
+        </div>
+        <div class="field">
+          <label for="first-name">名</label>
+          <input type="text" id="first-name" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="email">メールアドレス（@<span id="domain-label"></span>）</label>
+        <input type="email" id="email" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="password">パスワード（8文字以上）</label>
+        <input type="password" id="password" required minlength="8" autocomplete="new-password">
+      </div>
+      <button type="submit" class="primary" id="submit-btn">登録する</button>
+      <a class="link" href="login.html">すでにアカウントをお持ちの方はこちら</a>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    document.getElementById('domain-label').textContent = window.ALLOWED_EMAIL_DOMAIN;
+
+    const form = document.getElementById('signup-form');
+    const msgArea = document.getElementById('msg-area');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msgArea.innerHTML = '';
+
+      const lastName = document.getElementById('last-name').value.trim();
+      const firstName = document.getElementById('first-name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      const domain = email.split('@')[1] || '';
+      if(domain.toLowerCase() !== window.ALLOWED_EMAIL_DOMAIN.toLowerCase()){
+        msgArea.innerHTML = `<div class="msg error">@${window.ALLOWED_EMAIL_DOMAIN} のメールアドレスのみ登録できます。</div>`;
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '登録中...';
+
+      const { error } = await sb.auth.signUp({
+        email,
+        password,
+        options:{ data:{ last_name:lastName, first_name:firstName } }
+      });
+
+      if(error){
+        msgArea.innerHTML = `<div class="msg error">登録に失敗しました：${error.message}</div>`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = '登録する';
+        return;
+      }
+
+      msgArea.innerHTML = `<div class="msg info">登録が完了しました。管理者が承認すると利用できるようになります。</div>`;
+      form.querySelectorAll('input, button').forEach(el => el.disabled = true);
+      setTimeout(() => { location.href = 'index.html'; }, 1800);
+    });
+  </script>
+</body>
+</html>

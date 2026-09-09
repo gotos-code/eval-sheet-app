@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>評価シート</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="center-loading" id="loading">読み込み中...</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    (async () => {
+      const user = await getSessionUser();
+      if(!user){
+        location.href = 'login.html';
+        return;
+      }
+      const profile = await getProfile(user.id);
+      if(profile && profile.approved){
+        location.href = 'sheet.html';
+        return;
+      }
+      const el = document.getElementById('loading');
+      el.innerHTML = `
+        <div class="auth-card" style="max-width:420px;">
+          <span class="eyebrow">評価シート</span>
+          <h1>承認待ちです</h1>
+          <p class="msg info">
+            アカウントは作成されましたが、まだ管理者の承認が済んでいません。<br>
+            承認され次第、このページから利用できるようになります。
+          </p>
+          <button class="link" id="logout-btn">ログアウト</button>
+        </div>`;
+      el.style.display = 'flex';
+      document.getElementById('logout-btn').addEventListener('click', signOut);
+    })();
+  </script>
+</body>
+</html>
