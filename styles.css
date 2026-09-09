@@ -182,3 +182,4 @@ table.admin-table button:hover{ border-color:var(--accent); color:var(--accent);
   color:var(--muted);
   font-size:13px;
 }
+.center-loading[hidden]{ display:none; }
