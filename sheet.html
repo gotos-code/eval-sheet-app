@@ -1416,6 +1416,20 @@
   function fmtScore(v){ return (v === null || v === undefined) ? '—' : v.toFixed(1); }
   function fmtGrade(total){ return total === null ? '—' : gradeFor(total); }
 
+  // Fixed display order (roster order, not alphabetical). Anyone not in this
+  // list is pushed to the end rather than making the list skip/gap.
+  const SORT_ORDER = [
+    '有吉','荒木','山園','土手','嶋﨑','安武','高城','佐藤','井上','高山',
+    '木下','清家','松本','高橋','坂口','清水','原田','大西','横木','武川',
+    '丸山','吉田','渡邉','髙橋','木戸','多田','小田','園田','髙原','荒井',
+    '島原','緒方','山田','前田','繁永','三好','並河','坂田','尾鷲','時任',
+    '千代野','東島','山下','佐藤','高津','岡安','萩原','中村','貞金','瀧川'
+  ];
+  function sortOrderIndex(name){
+    const idx = SORT_ORDER.findIndex(surname => name.startsWith(surname));
+    return idx === -1 ? SORT_ORDER.length : idx;
+  }
+
   async function loadSummaryList(){
     const { data, error } = await sb.from('eval_sheets').select('id,name,data,updated_at').order('name');
     const container = document.getElementById('people-list');
@@ -1433,7 +1447,8 @@
       container.innerHTML = '<p class="footnote">まだ登録されていません。上の「Excelを一括インポート」または「＋新規追加」から登録してください。</p>';
       return;
     }
-    const rows = list.map(p => {
+    const sortedList = [...list].sort((a, b) => sortOrderIndex(a.name) - sortOrderIndex(b.name));
+    const rows = sortedList.map(p => {
       const model = normalizePeriods(p.data)[summaryPeriod];
       const items = (model && model.items) || [];
       const itemCells = Array.from({ length: 5 }, (_, i) => {
