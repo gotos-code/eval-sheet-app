@@ -1407,7 +1407,11 @@
     const rows = list.map(p => {
       const model = normalizePeriods(p.data)[summaryPeriod];
       const items = (model && model.items) || [];
-      const itemCells = Array.from({ length: 5 }, (_, i) => `<td>${fmtScore(computeItemScore(items[i]))}</td>`).join('');
+      const itemCells = Array.from({ length: 5 }, (_, i) => {
+        const it = items[i];
+        const tier = (it && it.self !== null && it.self !== undefined) ? it.self : null;
+        return `<td>${tier === null ? '—' : tier}</td>`;
+      }).join('');
       const contribScore = model ? computeContribScore(model.contribution) : null;
       const total = computeTotalFromModel(model);
       const grade = total === null ? '—' : gradeFor(total);
