@@ -765,7 +765,7 @@
             </div>
           </div>
         </td>
-        <td class="col-self"><input type="number" class="point-input self" min="0" max="${c.weight}" value="${c.self ?? ''}" placeholder="0-${c.weight}"></td>
+        <td class="col-self"><input type="number" class="point-input self" min="${-c.weight}" max="${c.weight}" value="${c.self ?? ''}" placeholder="-${c.weight}〜${c.weight}"></td>
         <td class="col-score">—</td>
       </tr>`;
   }
@@ -1413,7 +1413,7 @@
           const before = (contrib.self !== null && contrib.self !== undefined) ? contrib.self : '—';
           const after = effectiveValue(contrib);
           return `<td class="col-before">${before}</td>` +
-            `<td class="col-after"><input type="number" class="summary-contrib-input" min="0" max="${contrib.weight}" value="${after ?? ''}" placeholder="0-${contrib.weight}"></td>`;
+            `<td class="col-after"><input type="number" class="summary-contrib-input" min="${-contrib.weight}" max="${contrib.weight}" value="${after ?? ''}" placeholder="-${contrib.weight}〜${contrib.weight}"></td>`;
         })()
       : '<td>—</td><td>—</td>';
     const gradeBefore = fmtGrade(computeTotalBefore(model));
