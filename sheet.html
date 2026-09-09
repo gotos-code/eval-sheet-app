@@ -624,6 +624,7 @@
     line-height:1.6;
     padding:2px 4px;
   }
+  .item-legend{ margin:0 0 8px; }
 </style>
 </head>
 <body>
@@ -1385,9 +1386,9 @@
   function effectiveSelf(it){
     return (it.revisedSelf !== null && it.revisedSelf !== undefined) ? it.revisedSelf : it.self;
   }
-  function computeItemScore(it){
+  function computeItemScoreWith(it, valueFn){
     if(!it || it.weight === null || it.weight === undefined) return null;
-    const val = effectiveSelf(it);
+    const val = valueFn(it);
     if(val === null || val === undefined) return null;
     const max = it.maxPoint || (it.tiers ? it.tiers.length : 6) || 6;
     return (Number(val) / max) * 100 * it.weight / 100;
@@ -1396,18 +1397,21 @@
     if(!c || c.self === null || c.self === undefined) return null;
     return Number(c.self);
   }
-  function computeTotalFromModel(model){
+  function computeTotalWith(model, valueFn){
     if(!model) return null;
     let total = 0, any = false;
     (model.items || []).forEach(it => {
-      const s = computeItemScore(it);
+      const s = computeItemScoreWith(it, valueFn);
       if(s !== null){ total += s; any = true; }
     });
     const cs = computeContribScore(model.contribution);
     if(cs !== null){ total += cs; any = true; }
     return any ? total : null;
   }
+  const computeTotalBefore = (model) => computeTotalWith(model, it => it.self);
+  const computeTotalAfter = (model) => computeTotalWith(model, it => effectiveSelf(it));
   function fmtScore(v){ return (v === null || v === undefined) ? '—' : v.toFixed(1); }
+  function fmtGrade(total){ return total === null ? '—' : gradeFor(total); }
 
   async function loadSummaryList(){
     const { data, error } = await sb.from('eval_sheets').select('id,name,data,updated_at').order('name');
@@ -1439,17 +1443,26 @@
           `<td class="col-after"><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(after, tierCount)}</select></td>`;
       }).join('');
       const contribScore = model ? computeContribScore(model.contribution) : null;
-      const total = computeTotalFromModel(model);
-      const grade = total === null ? '—' : gradeFor(total);
+      const gradeBefore = fmtGrade(computeTotalBefore(model));
+      const gradeAfter = fmtGrade(computeTotalAfter(model));
       return `
         <tr class="person-row" data-id="${p.id}">
           <td class="col-name">${escapeHtml(p.name)}</td>
           ${itemCells}
           <td>${fmtScore(contribScore)}</td>
-          <td><span class="grade-pill">${grade}</span></td>
-          <td class="person-updated">${p.updated_at ? new Date(p.updated_at).toLocaleDateString('ja-JP') : ''}</td>
+          <td class="col-before"><span class="grade-pill">${gradeBefore}</span></td>
+          <td class="col-after"><span class="grade-pill after">${gradeAfter}</span></td>
         </tr>`;
     }).join('');
+
+    // Item names vary a little file to file, so use the first person that has
+    // data for this period as a representative legend, not a strict guarantee.
+    const legendSource = list
+      .map(p => normalizePeriods(p.data)[summaryPeriod])
+      .find(m => m && m.items && m.items.length > 0);
+    const legendText = legendSource
+      ? legendSource.items.map((it, i) => `${['①','②','③','④','⑤'][i] || (i+1)} ${it.name.replace(/\n/g, ' ')}`).join('　／　')
+      : '';
 
     const itemHeaders = ['①', '②', '③', '④', '⑤']
       .map(label => `<th colspan="2">${label}</th>`).join('');
@@ -1457,16 +1470,16 @@
       `<th class="sub-head">Before</th><th class="sub-head">After</th>`).join('');
 
     container.innerHTML = `
+      ${legendText ? `<p class="footnote item-legend">${escapeHtml(legendText)}</p>` : ''}
       <table class="summary-table">
         <thead>
           <tr>
             <th class="col-name" rowspan="2">氏名</th>
             ${itemHeaders}
             <th rowspan="2">貢献ポイント</th>
-            <th rowspan="2">評価ランク</th>
-            <th rowspan="2">更新日</th>
+            <th colspan="2">評価ランク</th>
           </tr>
-          <tr>${beforeAfterHeaders}</tr>
+          <tr>${beforeAfterHeaders}<th class="sub-head">Before</th><th class="sub-head">After</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -1481,7 +1494,7 @@
   });
 
   document.getElementById('people-list').addEventListener('click', (e) => {
-    if(e.target.closest('select, td.person-updated')) return;
+    if(e.target.closest('select')) return;
     const btn = e.target.closest('.person-row');
     if(!btn) return;
     openPersonTabById(btn.dataset.id);
@@ -1502,9 +1515,8 @@
     model.items[itemIdx].revisedSelf = select.value === '' ? null : Number(select.value);
     person.data = periods;
 
-    const total = computeTotalFromModel(model);
-    const gradeEl = row.querySelector('.grade-pill');
-    if(gradeEl) gradeEl.textContent = total === null ? '—' : gradeFor(total);
+    const gradeEl = row.querySelector('.grade-pill.after');
+    if(gradeEl) gradeEl.textContent = fmtGrade(computeTotalAfter(model));
 
     const statusEl = document.getElementById('summary-status');
     select.disabled = true;
