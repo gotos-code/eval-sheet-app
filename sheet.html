@@ -153,6 +153,27 @@
   .tab-close:hover{ color:var(--note); }
   .tab-panel[hidden]{ display:none; }
 
+  .period-switch{
+    display:flex;
+    gap:6px;
+  }
+  .period-btn{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:700;
+    padding:8px 18px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:var(--surface);
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .period-btn.active{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:var(--accent-ink);
+  }
+
   .eyebrow{
     font-size:12px;
     letter-spacing:.12em;
@@ -872,9 +893,7 @@
     return isNaN(n) ? null : n;
   }
 
-  function parseWorkbook(workbook){
-    const sheetName = workbook.SheetNames.find(n => n.indexOf('評価') >= 0) || workbook.SheetNames[0];
-    const ws = workbook.Sheets[sheetName];
+  function parseSheetModel(ws){
     if(!ws['!ref']) throw new Error('シートにデータが見つかりません');
     const ref = XLSX.utils.decode_range(ws['!ref']);
     const merges = ws['!merges'] || [];
@@ -983,16 +1002,41 @@
     return { meta, items, contribution };
   }
 
+  // A workbook has 4 sheets total; only "上期評価シート" and "下期評価シート" are import targets.
+  function parseWorkbookAll(workbook){
+    const result = { first_half: null, second_half: null };
+    workbook.SheetNames.forEach(sheetName => {
+      if(sheetName.indexOf('上期') >= 0){
+        try{ result.first_half = parseSheetModel(workbook.Sheets[sheetName]); }catch(e){ /* leave null */ }
+      } else if(sheetName.indexOf('下期') >= 0){
+        try{ result.second_half = parseSheetModel(workbook.Sheets[sheetName]); }catch(e){ /* leave null */ }
+      }
+    });
+    return result;
+  }
+
+  // Tolerates a legacy flat-model row shape (pre-period-split) by treating it as empty.
+  function normalizePeriods(data){
+    if(data && (data.first_half !== undefined || data.second_half !== undefined)){
+      return { first_half: data.first_half || null, second_half: data.second_half || null };
+    }
+    return { first_half: null, second_half: null };
+  }
+
   /* ---------- tab management ---------- */
   const state = {
     tabs: [], // [{id, name}]
     active: 'summary',
-    models: {} // id -> {model, recordId, name}
+    models: {} // id -> {periods:{first_half,second_half}, activePeriod, recordId, name}
   };
 
   function personPanelHtml(){
     return `
       <div class="page">
+        <div class="period-switch">
+          <button class="period-btn" type="button" data-period="first_half">上期</button>
+          <button class="period-btn" type="button" data-period="second_half">下期</button>
+        </div>
         <div class="toolbar">
           <label class="btn-file">
             📥 Excelを再インポート
@@ -1120,9 +1164,38 @@
     if(tabBtn){ setActive(tabBtn.dataset.tabId); }
   });
 
+  function updateSheetTitle(panel, period){
+    const el = panel.querySelector('.sheet-title');
+    if(el) el.textContent = period === 'first_half' ? '評価シート（上期）' : '評価シート（下期）';
+  }
+
+  function updatePeriodSwitchUI(panel, period){
+    panel.querySelectorAll('.period-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.period === period);
+    });
+  }
+
+  function switchPeriod(tabId, newPeriod){
+    const entry = state.models[tabId];
+    if(entry.activePeriod === newPeriod) return;
+    const panel = document.querySelector(`.tab-panel[data-tab-id="${tabId}"]`);
+    // keep whatever was on screen before switching away from it
+    entry.periods[entry.activePeriod] = collectModelFromDOM(panel);
+    entry.activePeriod = newPeriod;
+    if(!entry.periods[newPeriod]) entry.periods[newPeriod] = JSON.parse(JSON.stringify(SAMPLE_MODEL));
+    renderModel(panel, entry.periods[newPeriod]);
+    updatePeriodSwitchUI(panel, newPeriod);
+    updateSheetTitle(panel, newPeriod);
+  }
+
   function attachPersonPanelHandlers(panel, tabId){
     const fileInput = panel.querySelector('.file-input');
     const statusEl = panel.querySelector('.import-status');
+
+    panel.querySelectorAll('.period-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchPeriod(tabId, btn.dataset.period));
+    });
+
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if(!file) return;
@@ -1131,11 +1204,30 @@
         try{
           const data = new Uint8Array(ev.target.result);
           const workbook = XLSX.read(data, { type:'array' });
-          const model = parseWorkbook(workbook);
-          if(!model.meta.name) model.meta.name = state.models[tabId].name;
-          state.models[tabId].model = model;
-          renderModel(panel, model);
-          statusEl.textContent = `「${file.name}」を読み込み、反映しました（保存を押すまでサーバーには反映されません）`;
+          const parsed = parseWorkbookAll(workbook);
+          if(!parsed.first_half && !parsed.second_half){
+            throw new Error('「上期評価シート」「下期評価シート」のいずれのシートも見つかりませんでした');
+          }
+          const entry = state.models[tabId];
+          if(parsed.first_half){
+            if(!parsed.first_half.meta.name) parsed.first_half.meta.name = entry.name;
+            entry.periods.first_half = parsed.first_half;
+          }
+          if(parsed.second_half){
+            if(!parsed.second_half.meta.name) parsed.second_half.meta.name = entry.name;
+            entry.periods.second_half = parsed.second_half;
+          }
+          // show a period that was actually just updated
+          const shownPeriod = parsed[entry.activePeriod] ? entry.activePeriod : (parsed.first_half ? 'first_half' : 'second_half');
+          entry.activePeriod = shownPeriod;
+          renderModel(panel, entry.periods[shownPeriod]);
+          updatePeriodSwitchUI(panel, shownPeriod);
+          updateSheetTitle(panel, shownPeriod);
+
+          const parts = [];
+          if(parsed.first_half) parts.push('上期');
+          if(parsed.second_half) parts.push('下期');
+          statusEl.textContent = `「${file.name}」から${parts.join('・')}を読み込みました（保存を押すまでサーバーには反映されません）`;
           statusEl.className = 'import-status ok';
         }catch(err){
           statusEl.textContent = `読み込みに失敗しました：${err.message}`;
@@ -1153,8 +1245,12 @@
     const tabId = record.id;
     if(state.models[tabId]){ setActive(tabId); return; }
 
+    const periods = normalizePeriods(record.data);
+    const activePeriod = periods.first_half ? 'first_half' : (periods.second_half ? 'second_half' : 'first_half');
+    if(!periods[activePeriod]) periods[activePeriod] = JSON.parse(JSON.stringify(SAMPLE_MODEL));
+
     state.tabs.push({ id: tabId, name: record.name });
-    state.models[tabId] = { model: record.data, recordId: isNew ? null : record.id, name: record.name };
+    state.models[tabId] = { periods, activePeriod, recordId: isNew ? null : record.id, name: record.name };
 
     const panel = document.createElement('div');
     panel.className = 'tab-panel';
@@ -1162,7 +1258,9 @@
     panel.innerHTML = personPanelHtml();
     document.getElementById('tab-panels').appendChild(panel);
 
-    renderModel(panel, state.models[tabId].model);
+    renderModel(panel, periods[activePeriod]);
+    updatePeriodSwitchUI(panel, activePeriod);
+    updateSheetTitle(panel, activePeriod);
     attachPersonPanelHandlers(panel, tabId);
 
     renderTabBar();
@@ -1180,28 +1278,39 @@
     const entry = state.models[tabId];
     const panel = document.querySelector(`.tab-panel[data-tab-id="${tabId}"]`);
     const statusEl = panel.querySelector('.import-status');
-    const model = collectModelFromDOM(panel);
-    const name = model.meta.name.trim();
+
+    // sync whatever's currently on screen back into memory first
+    entry.periods[entry.activePeriod] = collectModelFromDOM(panel);
+    const name = entry.periods[entry.activePeriod].meta.name.trim();
     if(!name){
       statusEl.textContent = '氏名を入力してから保存してください';
       statusEl.className = 'import-status error';
       return;
     }
+    ['first_half', 'second_half'].forEach(p => { if(entry.periods[p]) entry.periods[p].meta.name = name; });
+
     statusEl.textContent = '保存中...';
     statusEl.className = 'import-status';
 
+    const dataToSave = { first_half: entry.periods.first_half, second_half: entry.periods.second_half };
+
     try{
       if(entry.recordId){
-        const { error } = await sb.from('eval_sheets').update({ name, data: model }).eq('id', entry.recordId);
+        const { error } = await sb.from('eval_sheets').update({ name, data: dataToSave }).eq('id', entry.recordId);
         if(error) throw error;
       } else {
-        const { data: existing } = await sb.from('eval_sheets').select('id').eq('name', name).maybeSingle();
+        const { data: existing } = await sb.from('eval_sheets').select('id, data').eq('name', name).maybeSingle();
         if(existing){
-          const { error } = await sb.from('eval_sheets').update({ data: model }).eq('id', existing.id);
+          const existingPeriods = normalizePeriods(existing.data);
+          const merged = {
+            first_half: dataToSave.first_half || existingPeriods.first_half,
+            second_half: dataToSave.second_half || existingPeriods.second_half
+          };
+          const { error } = await sb.from('eval_sheets').update({ data: merged }).eq('id', existing.id);
           if(error) throw error;
           entry.recordId = existing.id;
         } else {
-          const { data: inserted, error } = await sb.from('eval_sheets').insert({ name, data: model }).select().single();
+          const { data: inserted, error } = await sb.from('eval_sheets').insert({ name, data: dataToSave }).select().single();
           if(error) throw error;
           entry.recordId = inserted.id;
         }
@@ -1256,7 +1365,7 @@
 
   document.getElementById('add-new-btn').addEventListener('click', () => {
     const tempId = 'new-' + Date.now();
-    openPersonTab({ id: tempId, name: '新規', data: JSON.parse(JSON.stringify(SAMPLE_MODEL)) }, true);
+    openPersonTab({ id: tempId, name: '新規', data: { first_half: null, second_half: null } }, true);
   });
 
   /* ---------- bulk import ---------- */
@@ -1269,10 +1378,15 @@
       try{
         const buf = await file.arrayBuffer();
         const workbook = XLSX.read(new Uint8Array(buf), { type:'array' });
-        const model = parseWorkbook(workbook);
-        results.push({ fileName: file.name, model, detectedName: model.meta.name || '' });
+        const periods = parseWorkbookAll(workbook);
+        if(!periods.first_half && !periods.second_half){
+          throw new Error('「上期評価シート」「下期評価シート」のいずれのシートも見つかりませんでした');
+        }
+        const detectedName = (periods.first_half && periods.first_half.meta.name) ||
+                              (periods.second_half && periods.second_half.meta.name) || '';
+        results.push({ fileName: file.name, periods, detectedName });
       }catch(err){
-        results.push({ fileName: file.name, model: null, error: err.message });
+        results.push({ fileName: file.name, periods: null, error: err.message });
       }
     }
     showBulkReview(results);
@@ -1284,13 +1398,14 @@
     box.hidden = false;
     box.innerHTML = `
       <table class="review-table">
-        <thead><tr><th>ファイル名</th><th>氏名</th><th>状態</th></tr></thead>
+        <thead><tr><th>ファイル名</th><th>氏名</th><th>取り込みシート</th><th>状態</th></tr></thead>
         <tbody>
           ${results.map((r, i) => `
             <tr data-idx="${i}">
               <td>${escapeHtml(r.fileName)}</td>
-              <td>${r.model ? `<input type="text" class="review-name" value="${escapeHtml(r.detectedName)}" placeholder="氏名を入力">` : '—'}</td>
-              <td>${r.model ? (r.detectedName ? '検出済み' : '要入力') : `<span style="color:var(--note)">読み込み失敗：${escapeHtml(r.error)}</span>`}</td>
+              <td>${r.periods ? `<input type="text" class="review-name" value="${escapeHtml(r.detectedName)}" placeholder="氏名を入力">` : '—'}</td>
+              <td>${r.periods ? [r.periods.first_half ? '上期' : null, r.periods.second_half ? '下期' : null].filter(Boolean).join('・') : '—'}</td>
+              <td>${r.periods ? (r.detectedName ? '検出済み' : '氏名を要入力') : `<span style="color:var(--note)">読み込み失敗：${escapeHtml(r.error)}</span>`}</td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -1313,17 +1428,23 @@
       for(const row of rows){
         const idx = Number(row.dataset.idx);
         const item = results[idx];
-        if(!item.model){ skipCount++; continue; }
+        if(!item.periods){ skipCount++; continue; }
         const nameInput = row.querySelector('.review-name');
         const name = nameInput.value.trim();
         if(!name){ skipCount++; continue; }
-        item.model.meta.name = name;
+        if(item.periods.first_half) item.periods.first_half.meta.name = name;
+        if(item.periods.second_half) item.periods.second_half.meta.name = name;
         try{
-          const { data: existing } = await sb.from('eval_sheets').select('id').eq('name', name).maybeSingle();
+          const { data: existing } = await sb.from('eval_sheets').select('id, data').eq('name', name).maybeSingle();
           if(existing){
-            await sb.from('eval_sheets').update({ data: item.model }).eq('id', existing.id);
+            const existingPeriods = normalizePeriods(existing.data);
+            const merged = {
+              first_half: item.periods.first_half || existingPeriods.first_half,
+              second_half: item.periods.second_half || existingPeriods.second_half
+            };
+            await sb.from('eval_sheets').update({ data: merged }).eq('id', existing.id);
           } else {
-            await sb.from('eval_sheets').insert({ name, data: item.model });
+            await sb.from('eval_sheets').insert({ name, data: item.periods });
           }
           okCount++;
         }catch(err){
