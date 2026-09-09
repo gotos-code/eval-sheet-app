@@ -214,32 +214,55 @@
     max-width:280px;
     width:100%;
   }
-  .people-list{
-    display:flex;
-    flex-direction:column;
-    gap:1px;
-    background:var(--line);
-    border:1px solid var(--line);
-    border-radius:10px;
-    overflow:hidden;
-  }
-  .person-row{
+  .summary-controls{
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:12px 16px;
-    background:var(--surface);
-    border:none;
-    font-family:inherit;
-    font-size:14px;
-    font-weight:700;
-    color:var(--ink);
-    cursor:pointer;
-    text-align:left;
-    width:100%;
+    flex-wrap:wrap;
+    gap:12px;
   }
-  .person-row:hover{ background:color-mix(in srgb, var(--accent) 8%, var(--surface)); }
-  .person-updated{ font-size:12px; font-weight:500; color:var(--muted); }
+  .people-list{
+    background:var(--surface);
+    border:2px solid var(--ink);
+    border-radius:10px;
+    overflow-x:auto;
+  }
+  table.summary-table{
+    border-collapse:collapse;
+    width:100%;
+    font-size:12.5px;
+  }
+  .summary-table th, .summary-table td{
+    border:1px solid var(--ink);
+    padding:8px 10px;
+    text-align:center;
+  }
+  .summary-table thead th{
+    background:var(--panel);
+    color:var(--panel-ink);
+    font-weight:700;
+    font-size:11.5px;
+  }
+  .summary-table th.col-name, .summary-table td.col-name{
+    text-align:left;
+    min-width:140px;
+  }
+  .summary-table td.col-name{ font-weight:700; }
+  .summary-table tr.person-row{ cursor:pointer; }
+  .summary-table tr.person-row:hover td{ background:color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+  .summary-table td.person-updated{ font-size:11px; font-weight:500; color:var(--muted); white-space:nowrap; }
+  .grade-pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:26px;
+    padding:2px 8px;
+    border-radius:999px;
+    background:var(--result);
+    color:var(--result-ink);
+    font-weight:900;
+    font-size:13px;
+  }
 
   .review-table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
   .review-table th, .review-table td{ border:1px solid var(--line); padding:8px 10px; text-align:left; }
@@ -614,7 +637,13 @@
               <button class="btn-reset" id="add-new-btn" type="button">＋ 新規追加</button>
             </div>
           </div>
-          <input type="text" id="search-input" class="search-input" placeholder="氏名で検索">
+          <div class="summary-controls">
+            <div class="period-switch" id="summary-period-switch">
+              <button class="period-btn active" type="button" data-period="first_half">上期</button>
+              <button class="period-btn" type="button" data-period="second_half">下期</button>
+            </div>
+            <input type="text" id="search-input" class="search-input" placeholder="氏名で検索">
+          </div>
           <div id="bulk-review" hidden></div>
           <div id="people-list" class="people-list"></div>
           <p id="summary-status" class="footnote"></p>
@@ -1333,8 +1362,33 @@
   }
 
   /* ---------- summary panel ---------- */
+  let summaryPeriod = 'first_half';
+
+  function computeItemScore(it){
+    if(!it || it.weight === null || it.weight === undefined) return null;
+    if(it.self === null || it.self === undefined) return null;
+    const max = it.maxPoint || (it.tiers ? it.tiers.length : 6) || 6;
+    return (Number(it.self) / max) * 100 * it.weight / 100;
+  }
+  function computeContribScore(c){
+    if(!c || c.self === null || c.self === undefined) return null;
+    return Number(c.self);
+  }
+  function computeTotalFromModel(model){
+    if(!model) return null;
+    let total = 0, any = false;
+    (model.items || []).forEach(it => {
+      const s = computeItemScore(it);
+      if(s !== null){ total += s; any = true; }
+    });
+    const cs = computeContribScore(model.contribution);
+    if(cs !== null){ total += cs; any = true; }
+    return any ? total : null;
+  }
+  function fmtScore(v){ return (v === null || v === undefined) ? '—' : v.toFixed(1); }
+
   async function loadSummaryList(){
-    const { data, error } = await sb.from('eval_sheets').select('id,name,updated_at').order('name');
+    const { data, error } = await sb.from('eval_sheets').select('id,name,data,updated_at').order('name');
     const container = document.getElementById('people-list');
     if(error){
       container.innerHTML = `<p>読み込みに失敗しました：${escapeHtml(error.message)}</p>`;
@@ -1350,12 +1404,45 @@
       container.innerHTML = '<p class="footnote">まだ登録されていません。上の「Excelを一括インポート」または「＋新規追加」から登録してください。</p>';
       return;
     }
-    container.innerHTML = list.map(p => `
-      <button class="person-row" data-id="${p.id}">
-        <span class="person-name">${escapeHtml(p.name)}</span>
-        <span class="person-updated">${p.updated_at ? new Date(p.updated_at).toLocaleDateString('ja-JP') : ''}</span>
-      </button>`).join('');
+    const rows = list.map(p => {
+      const model = normalizePeriods(p.data)[summaryPeriod];
+      const items = (model && model.items) || [];
+      const itemCells = Array.from({ length: 5 }, (_, i) => `<td>${fmtScore(computeItemScore(items[i]))}</td>`).join('');
+      const contribScore = model ? computeContribScore(model.contribution) : null;
+      const total = computeTotalFromModel(model);
+      const grade = total === null ? '—' : gradeFor(total);
+      return `
+        <tr class="person-row" data-id="${p.id}">
+          <td class="col-name">${escapeHtml(p.name)}</td>
+          ${itemCells}
+          <td>${fmtScore(contribScore)}</td>
+          <td><span class="grade-pill">${grade}</span></td>
+          <td class="person-updated">${p.updated_at ? new Date(p.updated_at).toLocaleDateString('ja-JP') : ''}</td>
+        </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th class="col-name">氏名</th>
+            <th>①</th><th>②</th><th>③</th><th>④</th><th>⑤</th>
+            <th>貢献ポイント</th>
+            <th>評価ランク</th>
+            <th>更新日</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
   }
+
+  document.getElementById('summary-period-switch').addEventListener('click', (e) => {
+    const btn = e.target.closest('.period-btn');
+    if(!btn) return;
+    summaryPeriod = btn.dataset.period;
+    document.querySelectorAll('#summary-period-switch .period-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderPeopleList(window.__allPeople || []);
+  });
 
   document.getElementById('people-list').addEventListener('click', (e) => {
     const btn = e.target.closest('.person-row');
