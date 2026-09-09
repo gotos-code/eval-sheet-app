@@ -426,7 +426,7 @@
   table{
     border-collapse:collapse;
     width:100%;
-    min-width:1440px;
+    min-width:1280px;
     font-size:11.5px;
   }
   th,td{
@@ -507,14 +507,13 @@
     padding:5px 7px;
   }
   th.grp-self{ background:var(--self); color:var(--self-ink); }
-  th.grp-eval{ background:var(--eval); color:var(--eval-ink); }
-  td.col-self{ background:color-mix(in srgb, var(--self) 30%, var(--surface)); min-width:66px; }
-  td.col-eval{ background:color-mix(in srgb, var(--eval) 28%, var(--surface)); min-width:66px; }
+  td.col-self{ background:color-mix(in srgb, var(--self) 30%, var(--surface)); min-width:160px; }
+  td.col-self select{ font-size:14px; padding:7px 6px; }
   td.col-score{
     font-weight:900;
     font-variant-numeric:tabular-nums;
     font-size:13px;
-    min-width:60px;
+    min-width:90px;
   }
   .mbo-tab{
     writing-mode:vertical-rl;
@@ -700,8 +699,6 @@
         <td class="col-result"><textarea>${escapeHtml(it.note)}</textarea></td>
         ${scaleCells}
         <td class="col-self"><select class="tier-select self">${tierOptions(it.self, tierCount)}</select></td>
-        <td class="col-eval"><select class="tier-select first">${tierOptions(it.first, tierCount)}</select></td>
-        <td class="col-eval"><select class="tier-select final">${tierOptions(it.final, tierCount)}</select></td>
         <td class="col-score">—</td>
       </tr>`;
   }
@@ -729,8 +726,6 @@
           </div>
         </td>
         <td class="col-self"><input type="number" class="point-input self" min="0" max="${c.weight}" value="${c.self ?? ''}" placeholder="0-${c.weight}"></td>
-        <td class="col-eval"><input type="number" class="point-input first" min="0" max="${c.weight}" value="${c.first ?? ''}" placeholder="0-${c.weight}"></td>
-        <td class="col-eval"><input type="number" class="point-input final" min="0" max="${c.weight}" value="${c.final ?? ''}" placeholder="0-${c.weight}"></td>
         <td class="col-score">—</td>
       </tr>`;
   }
@@ -755,11 +750,11 @@
 
     const tierCount = (model.items[0] && model.items[0].tiers.length) || 6;
     root.querySelector('.scale-group-header').setAttribute('colspan', tierCount);
-    root.querySelector('.total-colspan-cell').setAttribute('colspan', 5 + tierCount);
+    root.querySelector('.total-colspan-cell').setAttribute('colspan', 3 + tierCount);
     const numsRow = root.querySelector('.scale-nums-row');
     numsRow.innerHTML = '<th colspan="5"></th>' +
       Array.from({length: tierCount}, (_, i) => `<th class="scale-num">${i + 1}</th>`).join('') +
-      '<th colspan="4"></th>';
+      '<th colspan="2"></th>';
 
     let html = '';
     let sw = 0;
@@ -770,7 +765,6 @@
     if(model.contribution) html += contribRowHtml(model.contribution, tierCount);
     root.querySelector('.rows-tbody').innerHTML = html;
 
-    root.dataset.subtotalWeight = sw || 1;
     const totalWeight = sw + (model.contribution ? model.contribution.weight : 0);
     root.querySelector('.total-weight-cell').textContent = totalWeight;
 
@@ -779,30 +773,31 @@
   }
 
   function recalcAll(root){
-    const subtotalWeight = Number(root.dataset.subtotalWeight) || 1;
     let mboSum = 0;
     root.querySelectorAll('.rows-tbody tr.item-row').forEach(row => {
       const hasWeight = row.dataset.hasWeight === '1';
       const weight = Number(row.dataset.weight);
       const max = Number(row.dataset.max) || 6;
       const scoreCell = row.querySelector('.col-score');
-      const finalSel = row.querySelector('select.tier-select.final');
-      updateTierHighlight(row, finalSel.value);
+      const selfSel = row.querySelector('select.tier-select.self');
+      updateTierHighlight(row, selfSel.value);
       if(!hasWeight){ scoreCell.textContent = '参考'; return; }
-      if(finalSel.value === ''){ scoreCell.textContent = '—'; return; }
-      const val = weight * (Number(finalSel.value) / max) * (100 / subtotalWeight);
+      if(selfSel.value === ''){ scoreCell.textContent = '—'; return; }
+      // 点数÷満点×100×ウエイト÷100
+      const val = (Number(selfSel.value) / max) * 100 * weight / 100;
       scoreCell.textContent = val.toFixed(1);
       mboSum += val;
     });
 
+    // 貢献ポイントは上の計算式を通さず、入力値をそのまま反映する
     let contribScore = 0;
     const contribRow = root.querySelector('.rows-tbody tr.contrib-row');
     if(contribRow){
-      const finalInput = contribRow.querySelector('input.point-input.final');
+      const selfInput = contribRow.querySelector('input.point-input.self');
       const scoreCell = contribRow.querySelector('.col-score');
-      if(finalInput.value === ''){ scoreCell.textContent = '—'; }
+      if(selfInput.value === ''){ scoreCell.textContent = '—'; }
       else {
-        contribScore = Number(finalInput.value);
+        contribScore = Number(selfInput.value);
         scoreCell.textContent = contribScore.toFixed(1);
       }
     }
@@ -855,8 +850,8 @@
         note: row.querySelector('td.col-result textarea').value,
         tiers,
         self: selVal(row.querySelector('select.tier-select.self')),
-        first: selVal(row.querySelector('select.tier-select.first')),
-        final: selVal(row.querySelector('select.tier-select.final')),
+        first: null,
+        final: null,
       });
     });
 
@@ -872,8 +867,8 @@
           final: contribRow.querySelector('.comment-final').value,
         },
         self: selVal(contribRow.querySelector('input.point-input.self')),
-        first: selVal(contribRow.querySelector('input.point-input.first')),
-        final: selVal(contribRow.querySelector('input.point-input.final')),
+        first: null,
+        final: null,
       };
     }
 
@@ -1112,8 +1107,6 @@
                 <th>結果</th>
                 <th class="scale-group scale-group-header" colspan="6">評価尺度</th>
                 <th class="grp-self">被評価者</th>
-                <th class="grp-eval">一次評価者</th>
-                <th class="grp-eval">最終評価者</th>
                 <th>スコア</th>
               </tr>
               <tr class="scale-nums-row">
@@ -1133,7 +1126,7 @@
                 <td></td>
                 <td class="col-item">TOTAL</td>
                 <td class="total-weight-cell">0</td>
-                <td class="total-colspan-cell" colspan="11"></td>
+                <td class="total-colspan-cell" colspan="9"></td>
                 <td class="total-score total-score-cell">0.0</td>
               </tr>
             </tfoot>
