@@ -270,6 +270,15 @@
     padding:3px 2px;
     margin:0 auto;
   }
+  .summary-table th.sub-head{
+    background:var(--surface);
+    color:var(--muted);
+    font-size:10px;
+    font-weight:700;
+    padding:4px 6px;
+  }
+  .summary-table td.col-before{ color:var(--muted); }
+  .summary-table td.col-after{ background:color-mix(in srgb, var(--eval) 20%, var(--surface)); }
 
   .review-table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
   .review-table th, .review-table td{ border:1px solid var(--line); padding:8px 10px; text-align:left; }
@@ -1371,11 +1380,17 @@
   /* ---------- summary panel ---------- */
   let summaryPeriod = 'first_half';
 
+  // "before" is the original 被評価者 value (self, read-only in the summary);
+  // "after" is an optional manager override (revisedSelf) editable only from the summary.
+  function effectiveSelf(it){
+    return (it.revisedSelf !== null && it.revisedSelf !== undefined) ? it.revisedSelf : it.self;
+  }
   function computeItemScore(it){
     if(!it || it.weight === null || it.weight === undefined) return null;
-    if(it.self === null || it.self === undefined) return null;
+    const val = effectiveSelf(it);
+    if(val === null || val === undefined) return null;
     const max = it.maxPoint || (it.tiers ? it.tiers.length : 6) || 6;
-    return (Number(it.self) / max) * 100 * it.weight / 100;
+    return (Number(val) / max) * 100 * it.weight / 100;
   }
   function computeContribScore(c){
     if(!c || c.self === null || c.self === undefined) return null;
@@ -1416,10 +1431,12 @@
       const items = (model && model.items) || [];
       const itemCells = Array.from({ length: 5 }, (_, i) => {
         const it = items[i];
-        if(!it) return '<td>—</td>';
+        if(!it) return '<td>—</td><td>—</td>';
         const tierCount = (it.tiers ? it.tiers.length : 6) || 6;
-        const tier = (it.self !== null && it.self !== undefined) ? it.self : null;
-        return `<td><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(tier, tierCount)}</select></td>`;
+        const before = (it.self !== null && it.self !== undefined) ? it.self : '—';
+        const after = effectiveSelf(it);
+        return `<td class="col-before">${before}</td>` +
+          `<td class="col-after"><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(after, tierCount)}</select></td>`;
       }).join('');
       const contribScore = model ? computeContribScore(model.contribution) : null;
       const total = computeTotalFromModel(model);
@@ -1434,16 +1451,22 @@
         </tr>`;
     }).join('');
 
+    const itemHeaders = ['①', '②', '③', '④', '⑤']
+      .map(label => `<th colspan="2">${label}</th>`).join('');
+    const beforeAfterHeaders = Array.from({ length: 5 }, () =>
+      `<th class="sub-head">Before</th><th class="sub-head">After</th>`).join('');
+
     container.innerHTML = `
       <table class="summary-table">
         <thead>
           <tr>
-            <th class="col-name">氏名</th>
-            <th>①</th><th>②</th><th>③</th><th>④</th><th>⑤</th>
-            <th>貢献ポイント</th>
-            <th>評価ランク</th>
-            <th>更新日</th>
+            <th class="col-name" rowspan="2">氏名</th>
+            ${itemHeaders}
+            <th rowspan="2">貢献ポイント</th>
+            <th rowspan="2">評価ランク</th>
+            <th rowspan="2">更新日</th>
           </tr>
+          <tr>${beforeAfterHeaders}</tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -1476,7 +1499,7 @@
     const periods = normalizePeriods(person.data);
     const model = periods[summaryPeriod];
     if(!model || !model.items[itemIdx]) return;
-    model.items[itemIdx].self = select.value === '' ? null : Number(select.value);
+    model.items[itemIdx].revisedSelf = select.value === '' ? null : Number(select.value);
     person.data = periods;
 
     const total = computeTotalFromModel(model);
