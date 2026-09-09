@@ -1,28 +1,15 @@
 # セットアップ手順
 
-## 1. Supabaseプロジェクトを新規作成
+このアプリはSO CRMと**同じSupabaseプロジェクト**（`gotos-code's Project`／`qoaovyinizzwhfahcowz.supabase.co`）を使い回しています。ただし、承認（使える／使えない）は完全に別テーブル `eval_profiles` で管理しており、SO CRMの`profiles`テーブルとは独立しています。SO CRMで承認済みでも、このアプリでは別途承認が必要です。
 
-1. https://supabase.com にログインし、「New project」
-2. プロジェクト名は任意（例：`eval-sheet`）、リージョンは `Northeast Asia (Tokyo)` を推奨
-3. 作成完了後、左メニュー「Project Settings」→「API」を開き、以下の2つをコピー
-   - **Project URL**（例：`https://xxxxxxxxxxxx.supabase.co`）
-   - **anon / public key**（"Publishable key" とも表示されます。**service_role key ではない方**）
+`config.js` には既にこのプロジェクトのURL・anon keyが反映済みです。
 
-## 2. config.js に反映
+## 1. テーブル・関数を作成（SQL Editorに貼り付けて実行）
 
-このリポジトリの `config.js` を開き、以下を実際の値に書き換えてください（このままClaudeに値を伝えてもらえれば、代わりに書き換えて反映することもできます）。
-
-```js
-window.SUPABASE_URL = 'https://xxxxxxxxxxxx.supabase.co';
-window.SUPABASE_ANON_KEY = 'ここにanon/publishable keyを貼り付け';
-```
-
-## 3. テーブル作成（SQL Editorに貼り付けて実行）
-
-Supabaseダッシュボード → 「SQL Editor」→ 「New query」に以下を貼り付けて実行してください。
+SupabaseのSQL Editorで **「gotos-code's Project」を選択した状態**で、以下を実行してください（`calendar-app`側では実行しないでください）。
 
 ```sql
-create table public.profiles (
+create table public.eval_profiles (
   id uuid references auth.users(id) primary key,
   email text,
   last_name text,
@@ -32,69 +19,88 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
-alter table public.profiles enable row level security;
+alter table public.eval_profiles enable row level security;
 
-create or replace function public.is_admin(uid uuid)
+-- 承認/管理者フラグの判定用（SECURITY DEFINERでRLSの再帰を回避）
+create or replace function public.is_eval_admin(uid uuid)
 returns boolean
 language sql
 security definer
 set search_path = public
 as $$
-  select coalesce((select is_admin from public.profiles where id = uid), false);
+  select coalesce((select is_admin from public.eval_profiles where id = uid), false);
 $$;
 
-create policy "select own profile" on public.profiles
+-- 行の可視範囲：自分の行 / 管理者は全員分
+create policy "eval: select own profile" on public.eval_profiles
   for select using (auth.uid() = id);
 
-create policy "update own profile" on public.profiles
+create policy "eval: insert own profile" on public.eval_profiles
+  for insert with check (auth.uid() = id);
+
+create policy "eval: update own profile" on public.eval_profiles
   for update using (auth.uid() = id);
 
-create policy "admin select all" on public.profiles
-  for select using (public.is_admin(auth.uid()));
+create policy "eval: admin select all" on public.eval_profiles
+  for select using (public.is_eval_admin(auth.uid()));
 
-create policy "admin update all" on public.profiles
-  for update using (public.is_admin(auth.uid()));
+-- 列単位の権限：一般ユーザーは自分の氏名だけ更新可能。
+-- approved / is_admin は直接更新できないようにし、権限昇格を防ぐ。
+revoke all on public.eval_profiles from authenticated, anon;
+grant select on public.eval_profiles to authenticated;
+grant insert (id, email, last_name, first_name) on public.eval_profiles to authenticated;
+grant update (last_name, first_name) on public.eval_profiles to authenticated;
 
-create or replace function public.handle_new_user()
-returns trigger
+-- 承認・管理者フラグの変更は、管理者だけが呼べるこの関数経由に限定
+create or replace function public.eval_set_approved(target_id uuid, new_value boolean)
+returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, last_name, first_name)
-  values (
-    new.id,
-    new.email,
-    new.raw_user_meta_data ->> 'last_name',
-    new.raw_user_meta_data ->> 'first_name'
-  );
-  return new;
+  if not public.is_eval_admin(auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+  update public.eval_profiles set approved = new_value where id = target_id;
 end;
 $$;
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+create or replace function public.eval_set_admin(target_id uuid, new_value boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_eval_admin(auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+  if target_id = auth.uid() then
+    raise exception 'cannot change your own admin status';
+  end if;
+  update public.eval_profiles set is_admin = new_value where id = target_id;
+end;
+$$;
 ```
 
-## 4. （任意）メール確認を無効化
+## 2. （任意）メール確認を無効化
 
-社内限定ツールで手軽に使いたい場合：Authentication → Providers → Email → 「Confirm email」をオフにすると、登録直後にログインできるようになります（オンのままだと確認メールのリンクをクリックするまでログインできません）。
+Authentication → Providers → Email → 「Confirm email」をオフにすると、登録直後にログインできます（既にSO CRM用にオフにしてある場合はそのままでOK）。
 
-## 5. 最初の管理者を承認する
+## 3. 最初の管理者を承認する
 
-1. サイトの `signup.html` から自分（例：goto.s@sora1.jp）のアカウントを作成
+1. サイトの `signup.html` から新規登録（SO CRMのアカウントを既に持っている場合は、`signup.html`ではなく`login.html`からそのままログインしてください。初回ログイン時に`eval_profiles`の行が自動作成されます）
 2. Supabase SQL Editorで以下を実行し、自分自身を承認済み・管理者にする
 
 ```sql
-update public.profiles
+update public.eval_profiles
 set approved = true, is_admin = true
 where email = 'goto.s@sora1.jp';
 ```
 
-3. 以降は `admin.html` から他のメンバーを承認できます
+3. 以降は `admin.html` から他のメンバーを承認できます（承認・管理者権限の切り替えはすべて上記のDB関数経由で行われるため、一般ユーザーが自分で承認済みにすることはできません）
 
-## 6. GitHub Pagesの公開設定
+## 4. GitHub Pagesの公開設定
 
-リポジトリ設定 → Pages → Source を「Deploy from a branch」→ `main` / `/(root)` に設定してください（Claude側でAPI経由の設定も試みます）。
+`main` ブランチのルートから配信するよう設定済みです。公開URL：https://gotos-code.github.io/eval-sheet-app/

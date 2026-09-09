@@ -19,7 +19,7 @@
         location.href = 'login.html';
         return;
       }
-      const profile = await getProfile(user.id);
+      const profile = await getProfile(user);
       if(profile && profile.approved){
         location.href = 'sheet.html';
         return;

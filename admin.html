@@ -43,7 +43,7 @@
 
     async function loadUsers(){
       const { data, error } = await sb
-        .from('profiles')
+        .from('eval_profiles')
         .select('*')
         .order('created_at', { ascending:false });
 
@@ -78,17 +78,19 @@
       const msgArea = document.getElementById('msg-area');
       msgArea.innerHTML = '';
 
-      let update = {};
+      let rpcName, rpcArgs;
       if(btn.dataset.action === 'toggle-approved'){
         const isApproved = row.querySelector('.pill.yes')?.textContent.includes('承認済み');
-        update = { approved: !isApproved };
+        rpcName = 'eval_set_approved';
+        rpcArgs = { target_id: id, new_value: !isApproved };
       } else if(btn.dataset.action === 'toggle-admin'){
         const pills = row.querySelectorAll('.pill');
         const isAdmin = pills[1].textContent.includes('管理者');
-        update = { is_admin: !isAdmin };
+        rpcName = 'eval_set_admin';
+        rpcArgs = { target_id: id, new_value: !isAdmin };
       }
 
-      const { error } = await sb.from('profiles').update(update).eq('id', id);
+      const { error } = await sb.rpc(rpcName, rpcArgs);
       if(error){
         msgArea.innerHTML = `<div class="msg error">更新に失敗しました：${error.message}</div>`;
         return;
