@@ -120,10 +120,9 @@
 
   .cards{
     display:grid;
-    grid-template-columns:1.3fr 1fr;
-    gap:20px;
+    grid-template-columns:1fr;
+    gap:24px;
   }
-  @media (max-width: 900px){ .cards{ grid-template-columns:1fr; } }
 
   .card{
     background:var(--surface);
@@ -146,12 +145,12 @@
   .axis-line{ stroke:var(--ink); stroke-width:1; opacity:.6; }
   .grid-line{ stroke:var(--line); stroke-width:1; }
   .diagonal-line{ stroke:var(--muted); stroke-width:1.5; stroke-dasharray:4 4; }
-  .axis-label{ fill:var(--muted); font-size:11px; }
-  .tick-label{ fill:var(--muted); font-size:10px; }
+  .axis-label{ fill:var(--muted); font-size:13px; }
+  .tick-label{ fill:var(--muted); font-size:11px; }
   .scatter-point{ stroke:var(--surface); stroke-width:1; cursor:default; fill:var(--accent); }
   .bar-before{ fill:var(--muted); opacity:.55; }
   .bar-after{ fill:var(--accent); }
-  .bar-count-label{ fill:var(--ink); font-size:11px; font-weight:700; }
+  .bar-count-label{ fill:var(--ink); font-size:14px; font-weight:700; }
 
   table.rank-table{ border-collapse:collapse; width:100%; font-size:12.5px; margin-top:8px; }
   .rank-table th, .rank-table td{ border:1px solid var(--line); padding:6px 8px; text-align:center; }
@@ -229,10 +228,10 @@
     const maxVal = Math.max(110, ...pts.map(r => r.after));
     const domainMax = Math.ceil(maxVal / 20) * 20;
 
-    const padL = 44, padR = 16, padT = 16, padB = 90;
-    const perCatWidth = 26;
-    const plotW = Math.max(400, pts.length * perCatWidth);
-    const plotH = 320;
+    const padL = 56, padR = 20, padT = 20, padB = 100;
+    const perCatWidth = 32;
+    const plotW = Math.max(500, pts.length * perCatWidth);
+    const plotH = 460;
     const W = padL + plotW + padR, H = padT + plotH + padB;
     const sx = i => padL + (i + 0.5) * perCatWidth;
     const sy = v => padT + plotH - (v / domainMax) * plotH;
@@ -246,7 +245,7 @@
     `).join('');
 
     const points = pts.map((r, i) => `
-      <circle class="scatter-point" cx="${sx(i)}" cy="${sy(r.after)}" r="4.5">
+      <circle class="scatter-point" cx="${sx(i)}" cy="${sy(r.after)}" r="6">
         <title>${escapeHtml(r.name)}：${r.after.toFixed(1)}（${gradeFor(r.after)}）</title>
       </circle>
       <text class="tick-label" x="0" y="0" text-anchor="end"
@@ -281,25 +280,25 @@
     const { grades, beforeCounts, afterCounts } = computeRankCounts(rows);
     const maxCount = Math.max(1, ...grades.map(g => Math.max(beforeCounts[g], afterCounts[g])));
 
-    const W = 420, H = 300;
-    const padL = 30, padR = 10, padT = 10, padB = 30;
+    const W = 720, H = 480;
+    const padL = 40, padR = 20, padT = 30, padB = 50;
     const plotW = W - padL - padR, plotH = H - padT - padB;
     const groupW = plotW / grades.length;
-    const barW = groupW * 0.32;
+    const barW = groupW * 0.36;
     const sy = v => plotH - (v / maxCount) * plotH;
 
     const bars = grades.map((g, i) => {
       const groupX = padL + i * groupW;
       const bH_before = (beforeCounts[g] / maxCount) * plotH;
       const bH_after = (afterCounts[g] / maxCount) * plotH;
-      const xBefore = groupX + groupW / 2 - barW - 3;
-      const xAfter = groupX + groupW / 2 + 3;
+      const xBefore = groupX + groupW / 2 - barW - 4;
+      const xAfter = groupX + groupW / 2 + 4;
       return `
         <rect class="bar-before" x="${xBefore}" y="${padT + plotH - bH_before}" width="${barW}" height="${bH_before}"></rect>
         <rect class="bar-after" x="${xAfter}" y="${padT + plotH - bH_after}" width="${barW}" height="${bH_after}"></rect>
-        <text class="bar-count-label" x="${xBefore + barW / 2}" y="${padT + plotH - bH_before - 4}" text-anchor="middle">${beforeCounts[g] || ''}</text>
-        <text class="bar-count-label" x="${xAfter + barW / 2}" y="${padT + plotH - bH_after - 4}" text-anchor="middle">${afterCounts[g] || ''}</text>
-        <text class="tick-label" x="${groupX + groupW / 2}" y="${padT + plotH + 16}" text-anchor="middle" style="font-size:12px; font-weight:700;">${g}</text>
+        <text class="bar-count-label" x="${xBefore + barW / 2}" y="${padT + plotH - bH_before - 6}" text-anchor="middle">${beforeCounts[g] || ''}</text>
+        <text class="bar-count-label" x="${xAfter + barW / 2}" y="${padT + plotH - bH_after - 6}" text-anchor="middle">${afterCounts[g] || ''}</text>
+        <text class="tick-label" x="${groupX + groupW / 2}" y="${padT + plotH + 22}" text-anchor="middle" style="font-size:16px; font-weight:700;">${g}</text>
       `;
     }).join('');
 
