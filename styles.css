@@ -66,6 +66,8 @@ body{
   color:var(--muted);
 }
 .field input{
+  width:100%;
+  min-width:0;
   font-family:inherit;
   font-size:14px;
   padding:10px 12px;
