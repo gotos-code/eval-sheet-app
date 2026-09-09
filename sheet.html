@@ -215,6 +215,27 @@
     max-width:280px;
     width:100%;
   }
+  .rank-filter-label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:var(--muted);
+    font-weight:500;
+  }
+  .rank-filter-select{
+    font-family:inherit;
+    font-size:13px;
+    padding:6px 8px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:var(--surface);
+    color:var(--ink);
+    width:auto;
+  }
+  .sub-head.sortable{ cursor:pointer; user-select:none; }
+  .sub-head.sortable:hover{ color:var(--panel-ink); }
+  .sub-head.sort-active{ color:var(--result); }
   .summary-controls{
     display:flex;
     align-items:center;
@@ -665,6 +686,19 @@
               <button class="period-btn" type="button" data-period="second_half">下期</button>
             </div>
             <input type="text" id="search-input" class="search-input" placeholder="氏名で検索">
+            <label class="rank-filter-label">Beforeランク
+              <select id="rank-filter-before" class="rank-filter-select">
+                <option value="all">すべて</option>
+                <option>S</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+              </select>
+            </label>
+            <label class="rank-filter-label">Afterランク
+              <select id="rank-filter-after" class="rank-filter-select">
+                <option value="all">すべて</option>
+                <option>S</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+              </select>
+            </label>
+            <button class="btn-reset" id="reset-sort-btn" type="button">並び順をリセット</button>
           </div>
           <div id="bulk-review" hidden></div>
           <div id="people-list" class="people-list"></div>
@@ -1384,6 +1418,43 @@
     return idx === -1 ? SORT_ORDER.length : idx;
   }
 
+  const GRADE_ORDER = ['E', 'D', 'C', 'B', 'A', 'S']; // index = rank, E worst .. S best
+  function gradeRank(g){ return GRADE_ORDER.indexOf(g); }
+
+  let searchQuery = '';
+  let rankFilter = { before: 'all', after: 'all' };
+  let currentSort = { key: 'default', dir: 'asc' }; // key: 'default' | 'item{0-4}Before/After' | 'contribBefore/After' | 'gradeBefore/After'
+
+  function passesRankFilter(p){
+    if(rankFilter.before === 'all' && rankFilter.after === 'all') return true;
+    const model = normalizePeriods(p.data)[summaryPeriod];
+    if(rankFilter.before !== 'all' && fmtGrade(computeTotalBefore(model)) !== rankFilter.before) return false;
+    if(rankFilter.after !== 'all' && fmtGrade(computeTotalAfter(model)) !== rankFilter.after) return false;
+    return true;
+  }
+
+  function getSortValue(p, key){
+    const model = normalizePeriods(p.data)[summaryPeriod];
+    if(!model) return null;
+    if(key === 'gradeBefore'){ const t = computeTotalBefore(model); return t === null ? null : gradeRank(gradeFor(t)); }
+    if(key === 'gradeAfter'){ const t = computeTotalAfter(model); return t === null ? null : gradeRank(gradeFor(t)); }
+    if(key === 'contribBefore') return model.contribution ? model.contribution.self : null;
+    if(key === 'contribAfter') return model.contribution ? effectiveValue(model.contribution) : null;
+    const m = key.match(/^item(\d)(Before|After)$/);
+    if(m){
+      const it = (model.items || [])[Number(m[1])];
+      if(!it) return null;
+      return m[2] === 'Before' ? it.self : effectiveValue(it);
+    }
+    return null;
+  }
+
+  function applyFiltersAndRender(){
+    const q = searchQuery.trim();
+    const filtered = (window.__allPeople || []).filter(p => (!q || p.name.includes(q)) && passesRankFilter(p));
+    renderPeopleList(filtered);
+  }
+
   async function loadSummaryList(){
     const { data, error } = await sb.from('eval_sheets').select('id,name,data,updated_at').order('name');
     const container = document.getElementById('people-list');
@@ -1392,7 +1463,7 @@
       return;
     }
     window.__allPeople = data;
-    renderPeopleList(data);
+    applyFiltersAndRender();
   }
 
   function buildPersonRow(p){
@@ -1428,14 +1499,20 @@
       </tr>`;
   }
 
+  function subHeaderHtml(label, key){
+    const active = currentSort.key === key;
+    const arrow = active ? (currentSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th class="sub-head sortable${active ? ' sort-active' : ''}" data-sort-key="${key}">${label}${arrow}</th>`;
+  }
+
   function buildGroupTable(items, rowsHtml){
     const legendText = items.length > 0
       ? items.map((it, i) => `${['①','②','③','④','⑤'][i] || (i + 1)} ${it.name.replace(/\n/g, ' ')}`).join('　／　')
       : 'データ未登録の項目';
     const itemHeaders = ['①', '②', '③', '④', '⑤']
       .map(label => `<th colspan="2">${label}</th>`).join('');
-    const beforeAfterHeaders = Array.from({ length: 5 }, () =>
-      `<th class="sub-head">Before</th><th class="sub-head">After</th>`).join('');
+    const beforeAfterHeaders = Array.from({ length: 5 }, (_, i) =>
+      subHeaderHtml('Before', `item${i}Before`) + subHeaderHtml('After', `item${i}After`)).join('');
     return `
       <div class="item-group">
         <p class="footnote item-legend">${escapeHtml(legendText)}</p>
@@ -1447,7 +1524,7 @@
               <th colspan="2">貢献ポイント</th>
               <th colspan="2">評価ランク</th>
             </tr>
-            <tr>${beforeAfterHeaders}<th class="sub-head">Before</th><th class="sub-head">After</th><th class="sub-head">Before</th><th class="sub-head">After</th></tr>
+            <tr>${beforeAfterHeaders}${subHeaderHtml('Before', 'contribBefore')}${subHeaderHtml('After', 'contribAfter')}${subHeaderHtml('Before', 'gradeBefore')}${subHeaderHtml('After', 'gradeAfter')}</tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
@@ -1457,7 +1534,7 @@
   function renderPeopleList(list){
     const container = document.getElementById('people-list');
     if(list.length === 0){
-      container.innerHTML = '<p class="footnote">まだ登録されていません。上の「Excelを一括インポート」または「＋新規追加」から登録してください。</p>';
+      container.innerHTML = '<p class="footnote">条件に一致する人がいません。</p>';
       return;
     }
     const sortedList = [...list].sort((a, b) => sortOrderIndex(a.name) - sortOrderIndex(b.name));
@@ -1479,6 +1556,19 @@
       group.members.push(p);
     });
 
+    if(currentSort.key !== 'default'){
+      groups.forEach(g => {
+        g.members.sort((a, b) => {
+          const va = getSortValue(a, currentSort.key);
+          const vb = getSortValue(b, currentSort.key);
+          if(va === null && vb === null) return 0;
+          if(va === null) return 1;
+          if(vb === null) return -1;
+          return currentSort.dir === 'asc' ? va - vb : vb - va;
+        });
+      });
+    }
+
     container.innerHTML = groups
       .map(g => buildGroupTable(g.items, g.members.map(buildPersonRow).join('')))
       .join('');
@@ -1489,10 +1579,33 @@
     if(!btn) return;
     summaryPeriod = btn.dataset.period;
     document.querySelectorAll('#summary-period-switch .period-btn').forEach(b => b.classList.toggle('active', b === btn));
-    renderPeopleList(window.__allPeople || []);
+    applyFiltersAndRender();
+  });
+
+  document.getElementById('rank-filter-before').addEventListener('change', (e) => {
+    rankFilter.before = e.target.value;
+    applyFiltersAndRender();
+  });
+  document.getElementById('rank-filter-after').addEventListener('change', (e) => {
+    rankFilter.after = e.target.value;
+    applyFiltersAndRender();
+  });
+
+  document.getElementById('reset-sort-btn').addEventListener('click', () => {
+    currentSort = { key: 'default', dir: 'asc' };
+    applyFiltersAndRender();
   });
 
   document.getElementById('people-list').addEventListener('click', (e) => {
+    const sortHeader = e.target.closest('th.sortable');
+    if(sortHeader){
+      const key = sortHeader.dataset.sortKey;
+      currentSort = (currentSort.key === key)
+        ? { key, dir: currentSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' };
+      applyFiltersAndRender();
+      return;
+    }
     if(e.target.closest('select, input')) return;
     const btn = e.target.closest('.person-row');
     if(!btn) return;
@@ -1537,9 +1650,8 @@
   });
 
   document.getElementById('search-input').addEventListener('input', (e) => {
-    const q = e.target.value.trim();
-    const filtered = (window.__allPeople || []).filter(p => p.name.includes(q));
-    renderPeopleList(filtered);
+    searchQuery = e.target.value;
+    applyFiltersAndRender();
   });
 
   document.getElementById('add-new-btn').addEventListener('click', () => {
