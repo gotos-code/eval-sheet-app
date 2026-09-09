@@ -263,7 +263,8 @@
     font-weight:900;
     font-size:13px;
   }
-  .summary-table select.summary-tier-select{
+  .summary-table select.summary-tier-select,
+  .summary-table input.summary-contrib-input{
     width:56px;
     text-align:center;
     font-size:12px;
@@ -1381,10 +1382,11 @@
   /* ---------- summary panel ---------- */
   let summaryPeriod = 'first_half';
 
-  // "before" is the original 被評価者 value (self, read-only in the summary);
+  // "before" is the original recorded value (self, read-only in the summary);
   // "after" is an optional manager override (revisedSelf) editable only from the summary.
-  function effectiveSelf(it){
-    return (it.revisedSelf !== null && it.revisedSelf !== undefined) ? it.revisedSelf : it.self;
+  // Items and 貢献ポイント share this same {self, revisedSelf} shape.
+  function effectiveValue(obj){
+    return (obj.revisedSelf !== null && obj.revisedSelf !== undefined) ? obj.revisedSelf : obj.self;
   }
   function computeItemScoreWith(it, valueFn){
     if(!it || it.weight === null || it.weight === undefined) return null;
@@ -1393,9 +1395,10 @@
     const max = it.maxPoint || (it.tiers ? it.tiers.length : 6) || 6;
     return (Number(val) / max) * 100 * it.weight / 100;
   }
-  function computeContribScore(c){
-    if(!c || c.self === null || c.self === undefined) return null;
-    return Number(c.self);
+  function computeContribScoreWith(c, valueFn){
+    if(!c) return null;
+    const val = valueFn(c);
+    return (val === null || val === undefined) ? null : Number(val);
   }
   function computeTotalWith(model, valueFn){
     if(!model) return null;
@@ -1404,12 +1407,12 @@
       const s = computeItemScoreWith(it, valueFn);
       if(s !== null){ total += s; any = true; }
     });
-    const cs = computeContribScore(model.contribution);
+    const cs = computeContribScoreWith(model.contribution, valueFn);
     if(cs !== null){ total += cs; any = true; }
     return any ? total : null;
   }
-  const computeTotalBefore = (model) => computeTotalWith(model, it => it.self);
-  const computeTotalAfter = (model) => computeTotalWith(model, it => effectiveSelf(it));
+  const computeTotalBefore = (model) => computeTotalWith(model, obj => obj.self);
+  const computeTotalAfter = (model) => computeTotalWith(model, obj => effectiveValue(obj));
   function fmtScore(v){ return (v === null || v === undefined) ? '—' : v.toFixed(1); }
   function fmtGrade(total){ return total === null ? '—' : gradeFor(total); }
 
@@ -1438,18 +1441,26 @@
         if(!it) return '<td>—</td><td>—</td>';
         const tierCount = (it.tiers ? it.tiers.length : 6) || 6;
         const before = (it.self !== null && it.self !== undefined) ? it.self : '—';
-        const after = effectiveSelf(it);
+        const after = effectiveValue(it);
         return `<td class="col-before">${before}</td>` +
           `<td class="col-after"><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(after, tierCount)}</select></td>`;
       }).join('');
-      const contribScore = model ? computeContribScore(model.contribution) : null;
+      const contrib = model ? model.contribution : null;
+      const contribCells = contrib
+        ? (() => {
+            const before = (contrib.self !== null && contrib.self !== undefined) ? contrib.self : '—';
+            const after = effectiveValue(contrib);
+            return `<td class="col-before">${before}</td>` +
+              `<td class="col-after"><input type="number" class="summary-contrib-input" min="0" max="${contrib.weight}" value="${after ?? ''}" placeholder="0-${contrib.weight}"></td>`;
+          })()
+        : '<td>—</td><td>—</td>';
       const gradeBefore = fmtGrade(computeTotalBefore(model));
       const gradeAfter = fmtGrade(computeTotalAfter(model));
       return `
         <tr class="person-row" data-id="${p.id}">
           <td class="col-name">${escapeHtml(p.name)}</td>
           ${itemCells}
-          <td>${fmtScore(contribScore)}</td>
+          ${contribCells}
           <td class="col-before"><span class="grade-pill">${gradeBefore}</span></td>
           <td class="col-after"><span class="grade-pill after">${gradeAfter}</span></td>
         </tr>`;
@@ -1476,10 +1487,10 @@
           <tr>
             <th class="col-name" rowspan="2">氏名</th>
             ${itemHeaders}
-            <th rowspan="2">貢献ポイント</th>
+            <th colspan="2">貢献ポイント</th>
             <th colspan="2">評価ランク</th>
           </tr>
-          <tr>${beforeAfterHeaders}<th class="sub-head">Before</th><th class="sub-head">After</th></tr>
+          <tr>${beforeAfterHeaders}<th class="sub-head">Before</th><th class="sub-head">After</th><th class="sub-head">Before</th><th class="sub-head">After</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -1494,34 +1505,44 @@
   });
 
   document.getElementById('people-list').addEventListener('click', (e) => {
-    if(e.target.closest('select')) return;
+    if(e.target.closest('select, input')) return;
     const btn = e.target.closest('.person-row');
     if(!btn) return;
     openPersonTabById(btn.dataset.id);
   });
 
   document.getElementById('people-list').addEventListener('change', async (e) => {
-    const select = e.target.closest('select.summary-tier-select');
-    if(!select) return;
-    const row = select.closest('tr.person-row');
+    const tierSelect = e.target.closest('select.summary-tier-select');
+    const contribInput = e.target.closest('input.summary-contrib-input');
+    const field = tierSelect || contribInput;
+    if(!field) return;
+
+    const row = field.closest('tr.person-row');
     const personId = row.dataset.id;
-    const itemIdx = Number(select.dataset.itemIdx);
     const person = (window.__allPeople || []).find(p => p.id === personId);
     if(!person) return;
 
     const periods = normalizePeriods(person.data);
     const model = periods[summaryPeriod];
-    if(!model || !model.items[itemIdx]) return;
-    model.items[itemIdx].revisedSelf = select.value === '' ? null : Number(select.value);
+    if(!model) return;
+
+    if(tierSelect){
+      const itemIdx = Number(tierSelect.dataset.itemIdx);
+      if(!model.items[itemIdx]) return;
+      model.items[itemIdx].revisedSelf = tierSelect.value === '' ? null : Number(tierSelect.value);
+    } else {
+      if(!model.contribution) return;
+      model.contribution.revisedSelf = contribInput.value === '' ? null : Number(contribInput.value);
+    }
     person.data = periods;
 
     const gradeEl = row.querySelector('.grade-pill.after');
     if(gradeEl) gradeEl.textContent = fmtGrade(computeTotalAfter(model));
 
     const statusEl = document.getElementById('summary-status');
-    select.disabled = true;
+    field.disabled = true;
     const { error } = await sb.from('eval_sheets').update({ data: person.data }).eq('id', personId);
-    select.disabled = false;
+    field.disabled = false;
     statusEl.textContent = error
       ? `保存に失敗しました：${error.message}`
       : `${person.name} の評価を更新しました`;
