@@ -263,6 +263,13 @@
     font-weight:900;
     font-size:13px;
   }
+  .summary-table select.summary-tier-select{
+    width:56px;
+    text-align:center;
+    font-size:12px;
+    padding:3px 2px;
+    margin:0 auto;
+  }
 
   .review-table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
   .review-table th, .review-table td{ border:1px solid var(--line); padding:8px 10px; text-align:left; }
@@ -1409,8 +1416,10 @@
       const items = (model && model.items) || [];
       const itemCells = Array.from({ length: 5 }, (_, i) => {
         const it = items[i];
-        const tier = (it && it.self !== null && it.self !== undefined) ? it.self : null;
-        return `<td>${tier === null ? '—' : tier}</td>`;
+        if(!it) return '<td>—</td>';
+        const tierCount = (it.tiers ? it.tiers.length : 6) || 6;
+        const tier = (it.self !== null && it.self !== undefined) ? it.self : null;
+        return `<td><select class="summary-tier-select" data-item-idx="${i}">${tierOptions(tier, tierCount)}</select></td>`;
       }).join('');
       const contribScore = model ? computeContribScore(model.contribution) : null;
       const total = computeTotalFromModel(model);
@@ -1449,9 +1458,38 @@
   });
 
   document.getElementById('people-list').addEventListener('click', (e) => {
+    if(e.target.closest('select, td.person-updated')) return;
     const btn = e.target.closest('.person-row');
     if(!btn) return;
     openPersonTabById(btn.dataset.id);
+  });
+
+  document.getElementById('people-list').addEventListener('change', async (e) => {
+    const select = e.target.closest('select.summary-tier-select');
+    if(!select) return;
+    const row = select.closest('tr.person-row');
+    const personId = row.dataset.id;
+    const itemIdx = Number(select.dataset.itemIdx);
+    const person = (window.__allPeople || []).find(p => p.id === personId);
+    if(!person) return;
+
+    const periods = normalizePeriods(person.data);
+    const model = periods[summaryPeriod];
+    if(!model || !model.items[itemIdx]) return;
+    model.items[itemIdx].self = select.value === '' ? null : Number(select.value);
+    person.data = periods;
+
+    const total = computeTotalFromModel(model);
+    const gradeEl = row.querySelector('.grade-pill');
+    if(gradeEl) gradeEl.textContent = total === null ? '—' : gradeFor(total);
+
+    const statusEl = document.getElementById('summary-status');
+    select.disabled = true;
+    const { error } = await sb.from('eval_sheets').update({ data: person.data }).eq('id', personId);
+    select.disabled = false;
+    statusEl.textContent = error
+      ? `保存に失敗しました：${error.message}`
+      : `${person.name} の評価を更新しました`;
   });
 
   document.getElementById('search-input').addEventListener('input', (e) => {
