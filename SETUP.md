@@ -101,6 +101,59 @@ where email = 'goto.s@sora1.jp';
 
 3. 以降は `admin.html` から他のメンバーを承認できます（承認・管理者権限の切り替えはすべて上記のDB関数経由で行われるため、一般ユーザーが自分で承認済みにすることはできません）
 
-## 4. GitHub Pagesの公開設定
+## 4. 複数人分のデータ保存用テーブル（eval_sheets）を追加
+
+一括インポート・サマリーページ機能のために、人ごとの評価データを保存するテーブルを追加します。**「gotos-code's Project」を選択した状態**でSQL Editorに貼り付けて実行してください。
+
+```sql
+create table public.eval_sheets (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  data jsonb not null,
+  updated_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.eval_sheets enable row level security;
+
+-- 承認済みユーザーなら誰でも閲覧・作成・更新できる（削除は管理者のみ）
+create policy "eval sheets: approved select" on public.eval_sheets
+  for select using (
+    exists (select 1 from public.eval_profiles p where p.id = auth.uid() and p.approved)
+  );
+
+create policy "eval sheets: approved insert" on public.eval_sheets
+  for insert with check (
+    exists (select 1 from public.eval_profiles p where p.id = auth.uid() and p.approved)
+  );
+
+create policy "eval sheets: approved update" on public.eval_sheets
+  for update using (
+    exists (select 1 from public.eval_profiles p where p.id = auth.uid() and p.approved)
+  );
+
+create policy "eval sheets: admin delete" on public.eval_sheets
+  for delete using (public.is_eval_admin(auth.uid()));
+
+revoke all on public.eval_sheets from anon;
+grant select, insert, update, delete on public.eval_sheets to authenticated;
+
+create or replace function public.eval_sheets_set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger eval_sheets_touch_updated_at
+before update on public.eval_sheets
+for each row execute procedure public.eval_sheets_set_updated_at();
+```
+
+## 5. GitHub Pagesの公開設定
 
 `main` ブランチのルートから配信するよう設定済みです。公開URL：https://gotos-code.github.io/eval-sheet-app/

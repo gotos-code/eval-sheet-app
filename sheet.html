@@ -109,14 +109,50 @@
   }
   .center-loading[hidden]{ display:none; }
 
-  .page{
-    max-width:1480px;
-    margin:0 auto;
+  /* ---------- tabs ---------- */
+  .tab-bar{
     display:flex;
-    flex-direction:column;
-    gap:20px;
-    padding:24px 24px 64px;
+    gap:4px;
+    padding:8px 20px 0;
+    background:var(--panel);
+    overflow-x:auto;
   }
+  .tab-btn-wrap{
+    display:inline-flex;
+    align-items:center;
+    background:var(--surface);
+    border-radius:8px 8px 0 0;
+    overflow:hidden;
+    flex:none;
+  }
+  .tab-btn{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:700;
+    padding:9px 14px;
+    border:none;
+    background:transparent;
+    color:var(--panel-ink);
+    opacity:.7;
+    cursor:pointer;
+    border-radius:8px 8px 0 0;
+    white-space:nowrap;
+  }
+  .tab-btn.active{ background:var(--paper); color:var(--accent); opacity:1; }
+  .tab-btn-wrap.active .tab-btn{ background:var(--paper); color:var(--accent); opacity:1; }
+  .tab-close{
+    font-family:inherit;
+    font-size:13px;
+    padding:0 10px 0 2px;
+    border:none;
+    background:transparent;
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .tab-btn-wrap.active .tab-close{ background:var(--paper); }
+  .tab-close:hover{ color:var(--note); }
+  .tab-panel[hidden]{ display:none; }
+
   .eyebrow{
     font-size:12px;
     letter-spacing:.12em;
@@ -125,7 +161,69 @@
     font-weight:500;
   }
 
-  /* ---------- toolbar ---------- */
+  .page{
+    max-width:1480px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    padding:24px 24px 64px;
+  }
+
+  /* ---------- summary panel ---------- */
+  .summary-toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .summary-toolbar h1{ font-size:22px; font-weight:900; margin:0; }
+  .summary-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+  .search-input{
+    font-family:inherit;
+    font-size:13px;
+    padding:9px 12px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:var(--surface);
+    color:var(--ink);
+    max-width:280px;
+    width:100%;
+  }
+  .people-list{
+    display:flex;
+    flex-direction:column;
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .person-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 16px;
+    background:var(--surface);
+    border:none;
+    font-family:inherit;
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink);
+    cursor:pointer;
+    text-align:left;
+    width:100%;
+  }
+  .person-row:hover{ background:color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+  .person-updated{ font-size:12px; font-weight:500; color:var(--muted); }
+
+  .review-table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+  .review-table th, .review-table td{ border:1px solid var(--line); padding:8px 10px; text-align:left; }
+  .review-table th{ background:var(--panel); color:var(--panel-ink); }
+  .review-table input{ width:100%; }
+
+  /* ---------- per-person toolbar ---------- */
   .toolbar{
     display:flex;
     align-items:center;
@@ -160,12 +258,12 @@
     cursor:pointer;
   }
   .btn-reset:hover{ color:var(--ink); border-color:var(--ink); }
-  #import-status{
+  .import-status{
     font-size:12.5px;
     color:var(--muted);
   }
-  #import-status.error{ color:var(--note); font-weight:700; }
-  #import-status.ok{ color:var(--accent); font-weight:700; }
+  .import-status.error{ color:var(--note); font-weight:700; }
+  .import-status.ok{ color:var(--accent); font-weight:700; }
 
   /* ---------- header panel ---------- */
   .header{
@@ -477,99 +575,28 @@
 
   <div class="center-loading" id="loading">読み込み中...</div>
 
-  <div class="page" id="page-content" hidden>
-    <div class="toolbar">
-      <label class="btn-file">
-        📥 Excelをインポート
-        <input type="file" id="file-input" accept=".xlsx,.xls">
-      </label>
-      <button class="btn-reset" id="reset-btn" type="button">サンプルに戻す</button>
-      <span id="import-status">まだファイルは読み込まれていません（サンプルデータを表示中）</span>
-    </div>
-
-    <div class="header">
-      <div class="header-title">
-        <span class="eyebrow">評価シート</span>
-        <h1 id="sheet-title">評価シート(下期修正用)</h1>
-        <div class="period-row">評価期間　<input type="text" id="f-period" placeholder="評価期間"></div>
-        <div class="hint">被評価者入力欄　─ 入力欄セルを編集してください</div>
-      </div>
-      <div class="header-info">
-        <div class="info-cell">
-          <span class="info-label">所属</span>
-          <input type="text" id="f-dept" placeholder="部署名を入力">
-        </div>
-        <div class="info-cell">
-          <span class="info-label">役職 / グレード</span>
-          <input type="text" id="f-grade" placeholder="例）主任 / G3">
-        </div>
-        <div class="info-cell">
-          <span class="info-label">氏名</span>
-          <input type="text" id="f-name" placeholder="氏名を入力">
-        </div>
-        <div class="info-cell dark">
-          <span class="info-label">部門</span>
-          <input type="text" id="f-org" placeholder="部門名">
-        </div>
-        <div class="info-cell dark">
-          <span class="info-label">一次評価者</span>
-          <input type="text" id="f-first-evaluator" placeholder="一次評価者">
-        </div>
-        <div class="info-cell dark">
-          <span class="info-label">最終評価者</span>
-          <input type="text" id="f-final-evaluator" placeholder="最終評価者">
-        </div>
-        <div class="result-cell">
-          <span class="info-label">評価結果（合計スコア）</span>
-          <div class="score-wrap">
-            <span class="score" id="total-score">0.0</span>
-            <span class="grade-badge" id="total-grade">—</span>
+  <div id="app-shell" hidden>
+    <div class="tab-bar" id="tab-bar"></div>
+    <div id="tab-panels">
+      <div class="tab-panel" data-tab-id="summary">
+        <div class="page">
+          <div class="summary-toolbar">
+            <h1>評価シート サマリー</h1>
+            <div class="summary-actions">
+              <label class="btn-file">
+                📥 Excelを一括インポート
+                <input type="file" id="bulk-file-input" accept=".xlsx,.xls" multiple>
+              </label>
+              <button class="btn-reset" id="add-new-btn" type="button">＋ 新規追加</button>
+            </div>
           </div>
+          <input type="text" id="search-input" class="search-input" placeholder="氏名で検索">
+          <div id="bulk-review" hidden></div>
+          <div id="people-list" class="people-list"></div>
+          <p id="summary-status" class="footnote"></p>
         </div>
       </div>
     </div>
-
-    <div class="table-wrap">
-      <table id="eval-table">
-        <thead>
-          <tr>
-            <th></th>
-            <th class="col-item">項目</th>
-            <th>ウエイト</th>
-            <th>評価基準</th>
-            <th>結果</th>
-            <th class="scale-group" id="scale-group-header" colspan="6">評価尺度</th>
-            <th class="grp-self">被評価者</th>
-            <th class="grp-eval">一次評価者</th>
-            <th class="grp-eval">最終評価者</th>
-            <th>スコア</th>
-          </tr>
-          <tr id="scale-nums-row">
-            <th colspan="5"></th>
-            <th class="scale-num">1</th>
-            <th class="scale-num">2</th>
-            <th class="scale-num">3</th>
-            <th class="scale-num">4</th>
-            <th class="scale-num">5</th>
-            <th class="scale-num">6</th>
-            <th colspan="4"></th>
-          </tr>
-        </thead>
-        <tbody id="rows-tbody">
-        </tbody>
-        <tfoot>
-          <tr class="total">
-            <td></td>
-            <td class="col-item">TOTAL</td>
-            <td id="total-weight-cell">0</td>
-            <td id="total-colspan-cell" colspan="11"></td>
-            <td class="total-score" id="total-score-cell">0.0</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-
-    <p class="footnote">スコアは各行の「最終評価者」欄の尺度をもとに、ウエイト×(尺度÷満点)×(100÷評価項目ウエイト合計) で自動計算しています（貢献ポイント行は入力値をそのまま加算）。評価結果の等級は合計スコアが 80以上:S／70以上:A／60以上:B／50以上:C／40以上:D／40未満:E で判定しています。ウエイトのない行（KPI達成など）は参考指標として扱い、合計には含まれません。</p>
   </div>
 
 <script>
@@ -615,9 +642,6 @@
     }
   };
 
-  let currentModel = null;
-  let subtotalWeight = 1;
-
   function gradeFor(total){
     if(total >= 80) return 'S';
     if(total >= 70) return 'A';
@@ -662,7 +686,7 @@
       <tr class="contrib-row" data-weight="${c.weight}">
         <td class="col-item">貢献ポイント</td>
         <td class="col-weight">${c.weight}</td>
-        <td class="col-criteria" colspan="${2 + tierCount}">
+        <td class="col-criteria" colspan="${2 + tierCount}" data-criteria="${escapeHtml(c.criteria)}">
           ${escapeHtml(c.criteria)}
           <div class="comment-block">
             <div>
@@ -691,9 +715,48 @@
     cells.forEach((cell, i) => cell.classList.toggle('tier-hit', val !== '' && (i + 1) === Number(val)));
   }
 
-  function recalcAll(){
+  function setMeta(root, model){
+    root.querySelector('.f-dept').value = model.meta.dept || '';
+    root.querySelector('.f-grade').value = model.meta.grade || '';
+    root.querySelector('.f-name').value = model.meta.name || '';
+    root.querySelector('.f-org').value = model.meta.org || '';
+    root.querySelector('.f-first-evaluator').value = model.meta.firstEvaluator || '';
+    root.querySelector('.f-final-evaluator').value = model.meta.finalEvaluator || '';
+    root.querySelector('.f-period').value = model.meta.period || '';
+  }
+
+  function renderModel(root, model){
+    setMeta(root, model);
+
+    const tierCount = (model.items[0] && model.items[0].tiers.length) || 6;
+    root.querySelector('.scale-group-header').setAttribute('colspan', tierCount);
+    root.querySelector('.total-colspan-cell').setAttribute('colspan', 5 + tierCount);
+    const numsRow = root.querySelector('.scale-nums-row');
+    numsRow.innerHTML = '<th colspan="5"></th>' +
+      Array.from({length: tierCount}, (_, i) => `<th class="scale-num">${i + 1}</th>`).join('') +
+      '<th colspan="4"></th>';
+
+    let html = '';
+    let sw = 0;
+    model.items.forEach((it, idx) => {
+      if(it.weight !== null && it.weight !== undefined) sw += it.weight;
+      html += itemRowHtml(it, idx, model.items.length);
+    });
+    if(model.contribution) html += contribRowHtml(model.contribution, tierCount);
+    root.querySelector('.rows-tbody').innerHTML = html;
+
+    root.dataset.subtotalWeight = sw || 1;
+    const totalWeight = sw + (model.contribution ? model.contribution.weight : 0);
+    root.querySelector('.total-weight-cell').textContent = totalWeight;
+
+    attachRowHandlers(root);
+    recalcAll(root);
+  }
+
+  function recalcAll(root){
+    const subtotalWeight = Number(root.dataset.subtotalWeight) || 1;
     let mboSum = 0;
-    document.querySelectorAll('#rows-tbody tr.item-row').forEach(row => {
+    root.querySelectorAll('.rows-tbody tr.item-row').forEach(row => {
       const hasWeight = row.dataset.hasWeight === '1';
       const weight = Number(row.dataset.weight);
       const max = Number(row.dataset.max) || 6;
@@ -708,7 +771,7 @@
     });
 
     let contribScore = 0;
-    const contribRow = document.querySelector('#rows-tbody tr.contrib-row');
+    const contribRow = root.querySelector('.rows-tbody tr.contrib-row');
     if(contribRow){
       const finalInput = contribRow.querySelector('input.point-input.final');
       const scoreCell = contribRow.querySelector('.col-score');
@@ -720,58 +783,70 @@
     }
 
     const total = mboSum + contribScore;
-    document.getElementById('total-score').textContent = total.toFixed(1);
-    document.getElementById('total-score-cell').textContent = total.toFixed(1);
-    document.getElementById('total-grade').textContent = gradeFor(total);
+    root.querySelectorAll('.total-score').forEach(el => el.textContent = total.toFixed(1));
+    const gradeEl = root.querySelector('.total-grade');
+    if(gradeEl) gradeEl.textContent = gradeFor(total);
   }
 
-  function attachHandlers(){
-    document.querySelectorAll('#rows-tbody select, #rows-tbody input').forEach(el => {
-      el.addEventListener('change', recalcAll);
-      el.addEventListener('input', recalcAll);
+  function attachRowHandlers(root){
+    root.querySelectorAll('.rows-tbody select, .rows-tbody input').forEach(el => {
+      el.addEventListener('change', () => recalcAll(root));
+      el.addEventListener('input', () => recalcAll(root));
     });
   }
 
-  function setMeta(model){
-    document.getElementById('f-dept').value = model.meta.dept || '';
-    document.getElementById('f-grade').value = model.meta.grade || '';
-    document.getElementById('f-name').value = model.meta.name || '';
-    document.getElementById('f-org').value = model.meta.org || '';
-    document.getElementById('f-first-evaluator').value = model.meta.firstEvaluator || '';
-    document.getElementById('f-final-evaluator').value = model.meta.finalEvaluator || '';
-    document.getElementById('f-period').value = model.meta.period || '';
+  function selVal(el){
+    return (!el || el.value === '') ? null : Number(el.value);
   }
 
-  function renderModel(model){
-    currentModel = model;
-    setMeta(model);
+  function collectModelFromDOM(root){
+    const meta = {
+      dept: root.querySelector('.f-dept').value,
+      grade: root.querySelector('.f-grade').value,
+      name: root.querySelector('.f-name').value,
+      org: root.querySelector('.f-org').value,
+      firstEvaluator: root.querySelector('.f-first-evaluator').value,
+      finalEvaluator: root.querySelector('.f-final-evaluator').value,
+      period: root.querySelector('.f-period').value,
+    };
 
-    const tierCount = (model.items[0] && model.items[0].tiers.length) || 6;
-    document.getElementById('scale-group-header').setAttribute('colspan', tierCount);
-    document.getElementById('total-colspan-cell').setAttribute('colspan', 5 + tierCount);
-    const numsRow = document.getElementById('scale-nums-row');
-    numsRow.innerHTML = '<th colspan="5"></th>' +
-      Array.from({length: tierCount}, (_, i) => `<th class="scale-num">${i + 1}</th>`).join('') +
-      '<th colspan="4"></th>';
-
-    let html = '';
-    let sw = 0;
-    model.items.forEach((it, idx) => {
-      if(it.weight !== null && it.weight !== undefined) sw += it.weight;
-      html += itemRowHtml(it, idx, model.items.length);
+    const items = [];
+    root.querySelectorAll('.rows-tbody tr.item-row').forEach(row => {
+      const tiers = Array.from(row.querySelectorAll('td.scale')).map(td => td.textContent);
+      items.push({
+        name: row.querySelector('td.col-item').textContent,
+        weight: row.dataset.hasWeight === '1' ? Number(row.dataset.weight) : null,
+        maxPoint: Number(row.dataset.max) || tiers.length,
+        criteria: row.querySelector('td.col-criteria').textContent,
+        note: row.querySelector('td.col-result textarea').value,
+        tiers,
+        self: selVal(row.querySelector('select.tier-select.self')),
+        first: selVal(row.querySelector('select.tier-select.first')),
+        final: selVal(row.querySelector('select.tier-select.final')),
+      });
     });
-    if(model.contribution) html += contribRowHtml(model.contribution, tierCount);
-    document.getElementById('rows-tbody').innerHTML = html;
 
-    subtotalWeight = sw || 1;
-    const totalWeight = sw + (model.contribution ? model.contribution.weight : 0);
-    document.getElementById('total-weight-cell').textContent = totalWeight;
+    let contribution = null;
+    const contribRow = root.querySelector('.rows-tbody tr.contrib-row');
+    if(contribRow){
+      contribution = {
+        weight: Number(contribRow.dataset.weight),
+        criteria: contribRow.querySelector('td.col-criteria').dataset.criteria || '',
+        comments:{
+          self: contribRow.querySelector('.comment-self').value,
+          first: contribRow.querySelector('.comment-first').value,
+          final: contribRow.querySelector('.comment-final').value,
+        },
+        self: selVal(contribRow.querySelector('input.point-input.self')),
+        first: selVal(contribRow.querySelector('input.point-input.first')),
+        final: selVal(contribRow.querySelector('input.point-input.final')),
+      };
+    }
 
-    attachHandlers();
-    recalcAll();
+    return { meta, items, contribution };
   }
 
-  /* ---------- xlsx import ---------- */
+  /* ---------- xlsx parsing (unchanged logic) ---------- */
   function cellAt(ws, r, c){
     const addr = XLSX.utils.encode_cell({ r, c });
     const cell = ws[addr];
@@ -908,53 +983,364 @@
     return { meta, items, contribution };
   }
 
-  const fileInput = document.getElementById('file-input');
-  const statusEl = document.getElementById('import-status');
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try{
-        const data = new Uint8Array(ev.target.result);
-        const workbook = XLSX.read(data, { type:'array' });
-        const model = parseWorkbook(workbook);
-        renderModel(model);
-        statusEl.textContent = `「${file.name}」を読み込み、反映しました（項目 ${model.items.length}件）`;
-        statusEl.className = 'ok';
-      }catch(err){
-        statusEl.textContent = `読み込みに失敗しました：${err.message}`;
-        statusEl.className = 'error';
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    fileInput.value = '';
+  /* ---------- tab management ---------- */
+  const state = {
+    tabs: [], // [{id, name}]
+    active: 'summary',
+    models: {} // id -> {model, recordId, name}
+  };
+
+  function personPanelHtml(){
+    return `
+      <div class="page">
+        <div class="toolbar">
+          <label class="btn-file">
+            📥 Excelを再インポート
+            <input type="file" class="file-input" accept=".xlsx,.xls">
+          </label>
+          <button class="btn-file save-btn" type="button" style="background:var(--ink);">💾 保存</button>
+          <span class="import-status"></span>
+        </div>
+
+        <div class="header">
+          <div class="header-title">
+            <span class="eyebrow">評価シート</span>
+            <h1 class="sheet-title">評価シート(下期修正用)</h1>
+            <div class="period-row">評価期間　<input type="text" class="f-period" placeholder="評価期間"></div>
+            <div class="hint">被評価者入力欄　─ 入力欄セルを編集してください</div>
+          </div>
+          <div class="header-info">
+            <div class="info-cell">
+              <span class="info-label">所属</span>
+              <input type="text" class="f-dept" placeholder="部署名を入力">
+            </div>
+            <div class="info-cell">
+              <span class="info-label">役職 / グレード</span>
+              <input type="text" class="f-grade" placeholder="例）主任 / G3">
+            </div>
+            <div class="info-cell">
+              <span class="info-label">氏名</span>
+              <input type="text" class="f-name" placeholder="氏名を入力">
+            </div>
+            <div class="info-cell dark">
+              <span class="info-label">部門</span>
+              <input type="text" class="f-org" placeholder="部門名">
+            </div>
+            <div class="info-cell dark">
+              <span class="info-label">一次評価者</span>
+              <input type="text" class="f-first-evaluator" placeholder="一次評価者">
+            </div>
+            <div class="info-cell dark">
+              <span class="info-label">最終評価者</span>
+              <input type="text" class="f-final-evaluator" placeholder="最終評価者">
+            </div>
+            <div class="result-cell">
+              <span class="info-label">評価結果（合計スコア）</span>
+              <div class="score-wrap">
+                <span class="score total-score">0.0</span>
+                <span class="grade-badge total-grade">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th class="col-item">項目</th>
+                <th>ウエイト</th>
+                <th>評価基準</th>
+                <th>結果</th>
+                <th class="scale-group scale-group-header" colspan="6">評価尺度</th>
+                <th class="grp-self">被評価者</th>
+                <th class="grp-eval">一次評価者</th>
+                <th class="grp-eval">最終評価者</th>
+                <th>スコア</th>
+              </tr>
+              <tr class="scale-nums-row">
+                <th colspan="5"></th>
+                <th class="scale-num">1</th>
+                <th class="scale-num">2</th>
+                <th class="scale-num">3</th>
+                <th class="scale-num">4</th>
+                <th class="scale-num">5</th>
+                <th class="scale-num">6</th>
+                <th colspan="4"></th>
+              </tr>
+            </thead>
+            <tbody class="rows-tbody"></tbody>
+            <tfoot>
+              <tr class="total">
+                <td></td>
+                <td class="col-item">TOTAL</td>
+                <td class="total-weight-cell">0</td>
+                <td class="total-colspan-cell" colspan="11"></td>
+                <td class="total-score total-score-cell">0.0</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <p class="footnote">スコアは各行の「最終評価者」欄の尺度をもとに、ウエイト×(尺度÷満点)×(100÷評価項目ウエイト合計) で自動計算しています（貢献ポイント行は入力値をそのまま加算）。評価結果の等級は合計スコアが 80以上:S／70以上:A／60以上:B／50以上:C／40以上:D／40未満:E で判定しています。ウエイトのない行（KPI達成など）は参考指標として扱い、合計には含まれません。</p>
+      </div>`;
+  }
+
+  function renderTabBar(){
+    const bar = document.getElementById('tab-bar');
+    bar.innerHTML = `
+      <button class="tab-btn ${state.active === 'summary' ? 'active' : ''}" data-tab-id="summary">📋 サマリー</button>
+      ${state.tabs.map(t => `
+        <span class="tab-btn-wrap ${state.active === t.id ? 'active' : ''}">
+          <button class="tab-btn" data-tab-id="${t.id}">${escapeHtml(state.models[t.id].name || t.name)}</button>
+          <button class="tab-close" data-tab-id="${t.id}" title="閉じる">×</button>
+        </span>`).join('')}`;
+  }
+
+  function setActive(tabId){
+    state.active = tabId;
+    document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = (p.dataset.tabId !== tabId); });
+    renderTabBar();
+  }
+
+  function closeTab(tabId){
+    state.tabs = state.tabs.filter(t => t.id !== tabId);
+    delete state.models[tabId];
+    const panel = document.querySelector(`.tab-panel[data-tab-id="${tabId}"]`);
+    if(panel) panel.remove();
+    if(state.active === tabId){ setActive('summary'); }
+    else { renderTabBar(); }
+  }
+
+  document.getElementById('tab-bar').addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('.tab-close');
+    if(closeBtn){ closeTab(closeBtn.dataset.tabId); return; }
+    const tabBtn = e.target.closest('.tab-btn');
+    if(tabBtn){ setActive(tabBtn.dataset.tabId); }
   });
 
-  document.getElementById('reset-btn').addEventListener('click', () => {
-    renderModel(JSON.parse(JSON.stringify(SAMPLE_MODEL)));
-    statusEl.textContent = 'サンプルデータを表示中です';
-    statusEl.className = '';
-  });
-
-  const STORAGE_KEY = 'eval-sheet-draft-meta-v1';
-  ['f-dept','f-grade','f-name'].forEach(id => {
-    const el = document.getElementById(id);
-    try{
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      if(saved[id]) el.value = saved[id];
-    }catch(e){}
-    el.addEventListener('input', () => {
-      try{
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-        saved[id] = el.value;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-      }catch(e){}
+  function attachPersonPanelHandlers(panel, tabId){
+    const fileInput = panel.querySelector('.file-input');
+    const statusEl = panel.querySelector('.import-status');
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try{
+          const data = new Uint8Array(ev.target.result);
+          const workbook = XLSX.read(data, { type:'array' });
+          const model = parseWorkbook(workbook);
+          if(!model.meta.name) model.meta.name = state.models[tabId].name;
+          state.models[tabId].model = model;
+          renderModel(panel, model);
+          statusEl.textContent = `「${file.name}」を読み込み、反映しました（保存を押すまでサーバーには反映されません）`;
+          statusEl.className = 'import-status ok';
+        }catch(err){
+          statusEl.textContent = `読み込みに失敗しました：${err.message}`;
+          statusEl.className = 'import-status error';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      fileInput.value = '';
     });
+
+    panel.querySelector('.save-btn').addEventListener('click', () => saveTab(tabId));
+  }
+
+  function openPersonTab(record, isNew){
+    const tabId = record.id;
+    if(state.models[tabId]){ setActive(tabId); return; }
+
+    state.tabs.push({ id: tabId, name: record.name });
+    state.models[tabId] = { model: record.data, recordId: isNew ? null : record.id, name: record.name };
+
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel';
+    panel.dataset.tabId = tabId;
+    panel.innerHTML = personPanelHtml();
+    document.getElementById('tab-panels').appendChild(panel);
+
+    renderModel(panel, state.models[tabId].model);
+    attachPersonPanelHandlers(panel, tabId);
+
+    renderTabBar();
+    setActive(tabId);
+  }
+
+  async function openPersonTabById(id){
+    if(state.models[id]){ setActive(id); return; }
+    const { data, error } = await sb.from('eval_sheets').select('*').eq('id', id).single();
+    if(error){ alert('読み込みに失敗しました：' + error.message); return; }
+    openPersonTab(data, false);
+  }
+
+  async function saveTab(tabId){
+    const entry = state.models[tabId];
+    const panel = document.querySelector(`.tab-panel[data-tab-id="${tabId}"]`);
+    const statusEl = panel.querySelector('.import-status');
+    const model = collectModelFromDOM(panel);
+    const name = model.meta.name.trim();
+    if(!name){
+      statusEl.textContent = '氏名を入力してから保存してください';
+      statusEl.className = 'import-status error';
+      return;
+    }
+    statusEl.textContent = '保存中...';
+    statusEl.className = 'import-status';
+
+    try{
+      if(entry.recordId){
+        const { error } = await sb.from('eval_sheets').update({ name, data: model }).eq('id', entry.recordId);
+        if(error) throw error;
+      } else {
+        const { data: existing } = await sb.from('eval_sheets').select('id').eq('name', name).maybeSingle();
+        if(existing){
+          const { error } = await sb.from('eval_sheets').update({ data: model }).eq('id', existing.id);
+          if(error) throw error;
+          entry.recordId = existing.id;
+        } else {
+          const { data: inserted, error } = await sb.from('eval_sheets').insert({ name, data: model }).select().single();
+          if(error) throw error;
+          entry.recordId = inserted.id;
+        }
+      }
+      entry.name = name;
+      renderTabBar();
+      statusEl.textContent = `保存しました（${new Date().toLocaleTimeString('ja-JP')}）`;
+      statusEl.className = 'import-status ok';
+      loadSummaryList();
+    }catch(err){
+      statusEl.textContent = `保存に失敗しました：${err.message}`;
+      statusEl.className = 'import-status error';
+    }
+  }
+
+  /* ---------- summary panel ---------- */
+  async function loadSummaryList(){
+    const { data, error } = await sb.from('eval_sheets').select('id,name,updated_at').order('name');
+    const container = document.getElementById('people-list');
+    if(error){
+      container.innerHTML = `<p>読み込みに失敗しました：${escapeHtml(error.message)}</p>`;
+      return;
+    }
+    window.__allPeople = data;
+    renderPeopleList(data);
+  }
+
+  function renderPeopleList(list){
+    const container = document.getElementById('people-list');
+    if(list.length === 0){
+      container.innerHTML = '<p class="footnote">まだ登録されていません。上の「Excelを一括インポート」または「＋新規追加」から登録してください。</p>';
+      return;
+    }
+    container.innerHTML = list.map(p => `
+      <button class="person-row" data-id="${p.id}">
+        <span class="person-name">${escapeHtml(p.name)}</span>
+        <span class="person-updated">${p.updated_at ? new Date(p.updated_at).toLocaleDateString('ja-JP') : ''}</span>
+      </button>`).join('');
+  }
+
+  document.getElementById('people-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('.person-row');
+    if(!btn) return;
+    openPersonTabById(btn.dataset.id);
   });
 
-  window.__initSheet = function(){
-    renderModel(JSON.parse(JSON.stringify(SAMPLE_MODEL)));
+  document.getElementById('search-input').addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    const filtered = (window.__allPeople || []).filter(p => p.name.includes(q));
+    renderPeopleList(filtered);
+  });
+
+  document.getElementById('add-new-btn').addEventListener('click', () => {
+    const tempId = 'new-' + Date.now();
+    openPersonTab({ id: tempId, name: '新規', data: JSON.parse(JSON.stringify(SAMPLE_MODEL)) }, true);
+  });
+
+  /* ---------- bulk import ---------- */
+  const bulkFileInput = document.getElementById('bulk-file-input');
+  bulkFileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files);
+    if(files.length === 0) return;
+    const results = [];
+    for(const file of files){
+      try{
+        const buf = await file.arrayBuffer();
+        const workbook = XLSX.read(new Uint8Array(buf), { type:'array' });
+        const model = parseWorkbook(workbook);
+        results.push({ fileName: file.name, model, detectedName: model.meta.name || '' });
+      }catch(err){
+        results.push({ fileName: file.name, model: null, error: err.message });
+      }
+    }
+    showBulkReview(results);
+    bulkFileInput.value = '';
+  });
+
+  function showBulkReview(results){
+    const box = document.getElementById('bulk-review');
+    box.hidden = false;
+    box.innerHTML = `
+      <table class="review-table">
+        <thead><tr><th>ファイル名</th><th>氏名</th><th>状態</th></tr></thead>
+        <tbody>
+          ${results.map((r, i) => `
+            <tr data-idx="${i}">
+              <td>${escapeHtml(r.fileName)}</td>
+              <td>${r.model ? `<input type="text" class="review-name" value="${escapeHtml(r.detectedName)}" placeholder="氏名を入力">` : '—'}</td>
+              <td>${r.model ? (r.detectedName ? '検出済み' : '要入力') : `<span style="color:var(--note)">読み込み失敗：${escapeHtml(r.error)}</span>`}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="toolbar" style="margin-top:10px;">
+        <button class="btn-file" id="bulk-confirm-btn" type="button">登録する</button>
+        <button class="btn-reset" id="bulk-cancel-btn" type="button">キャンセル</button>
+      </div>`;
+
+    document.getElementById('bulk-cancel-btn').addEventListener('click', () => {
+      box.hidden = true;
+      box.innerHTML = '';
+    });
+
+    document.getElementById('bulk-confirm-btn').addEventListener('click', async () => {
+      const confirmBtn = document.getElementById('bulk-confirm-btn');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '登録中...';
+      const rows = box.querySelectorAll('tbody tr');
+      let okCount = 0, skipCount = 0;
+      for(const row of rows){
+        const idx = Number(row.dataset.idx);
+        const item = results[idx];
+        if(!item.model){ skipCount++; continue; }
+        const nameInput = row.querySelector('.review-name');
+        const name = nameInput.value.trim();
+        if(!name){ skipCount++; continue; }
+        item.model.meta.name = name;
+        try{
+          const { data: existing } = await sb.from('eval_sheets').select('id').eq('name', name).maybeSingle();
+          if(existing){
+            await sb.from('eval_sheets').update({ data: item.model }).eq('id', existing.id);
+          } else {
+            await sb.from('eval_sheets').insert({ name, data: item.model });
+          }
+          okCount++;
+        }catch(err){
+          skipCount++;
+        }
+      }
+      box.hidden = true;
+      box.innerHTML = '';
+      document.getElementById('summary-status').textContent =
+        `${okCount}件登録・更新しました${skipCount ? `（${skipCount}件はスキップされました）` : ''}`;
+      loadSummaryList();
+    });
+  }
+
+  /* ---------- boot ---------- */
+  window.__initSheetApp = async function(){
+    await loadSummaryList();
   };
 })();
 </script>
@@ -965,8 +1351,8 @@
     document.getElementById('user-email').textContent = result.user.email;
     if(result.profile.is_admin) document.getElementById('admin-link').hidden = false;
     document.getElementById('loading').hidden = true;
-    document.getElementById('page-content').hidden = false;
-    window.__initSheet();
+    document.getElementById('app-shell').hidden = false;
+    await window.__initSheetApp();
   })();
   document.getElementById('logout-btn').addEventListener('click', signOut);
 </script>
