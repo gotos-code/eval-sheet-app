@@ -148,13 +148,15 @@
   .diagonal-line{ stroke:var(--muted); stroke-width:1.5; stroke-dasharray:4 4; }
   .axis-label{ fill:var(--muted); font-size:11px; }
   .tick-label{ fill:var(--muted); font-size:10px; }
-  .scatter-point{ stroke:var(--surface); stroke-width:1; cursor:default; }
-  .scatter-point.improved{ fill:var(--accent); }
-  .scatter-point.declined{ fill:var(--note); }
-  .scatter-point.same{ fill:var(--muted); }
+  .scatter-point{ stroke:var(--surface); stroke-width:1; cursor:default; fill:var(--accent); }
   .bar-before{ fill:var(--muted); opacity:.55; }
   .bar-after{ fill:var(--accent); }
   .bar-count-label{ fill:var(--ink); font-size:11px; font-weight:700; }
+
+  table.rank-table{ border-collapse:collapse; width:100%; font-size:12.5px; margin-top:8px; }
+  .rank-table th, .rank-table td{ border:1px solid var(--line); padding:6px 8px; text-align:center; }
+  .rank-table thead th{ background:var(--panel); color:var(--panel-ink); font-weight:700; }
+  .rank-table td.row-label{ text-align:left; font-weight:700; background:var(--surface); }
 
   .footnote{ font-size:11.5px; color:var(--muted); line-height:1.6; }
 </style>
@@ -181,13 +183,8 @@
 
     <div class="cards">
       <div class="card">
-        <h2>修正前 → 修正後 散布図</h2>
-        <p class="sub">横軸：修正前スコア（Before）／縦軸：修正後スコア（After）。点線は「変化なし」の基準線です。</p>
-        <div class="chart-legend">
-          <span><span class="swatch" style="background:var(--accent);"></span>上昇</span>
-          <span><span class="swatch" style="background:var(--note);"></span>低下</span>
-          <span><span class="swatch" style="background:var(--muted);"></span>変化なし</span>
-        </div>
+        <h2>人ごとの修正後スコア</h2>
+        <p class="sub">横軸：氏名／縦軸：修正後スコア（After）。</p>
         <div id="scatter-wrap"></div>
       </div>
 
@@ -199,6 +196,7 @@
           <span><span class="swatch" style="background:var(--accent);"></span>修正後</span>
         </div>
         <div id="rank-bar-wrap"></div>
+        <div id="rank-table-wrap"></div>
       </div>
     </div>
 
@@ -223,52 +221,51 @@
 
   function renderScatter(rows){
     const wrap = document.getElementById('scatter-wrap');
-    const pts = rows.filter(r => r.before !== null && r.after !== null);
+    const pts = rows.filter(r => r.after !== null);
     if(pts.length === 0){
-      wrap.innerHTML = '<p class="footnote">表示できるデータがありません（修正前・修正後の両方が入力されている人がいません）。</p>';
+      wrap.innerHTML = '<p class="footnote">表示できるデータがありません（修正後のスコアが入力されている人がいません）。</p>';
       return;
     }
-    const maxVal = Math.max(110, ...pts.map(r => Math.max(r.before, r.after)));
+    const maxVal = Math.max(110, ...pts.map(r => r.after));
     const domainMax = Math.ceil(maxVal / 20) * 20;
 
-    const W = 480, H = 420;
-    const padL = 44, padR = 16, padT = 16, padB = 40;
-    const plotW = W - padL - padR, plotH = H - padT - padB;
-    const sx = v => padL + (v / domainMax) * plotW;
+    const padL = 44, padR = 16, padT = 16, padB = 90;
+    const perCatWidth = 26;
+    const plotW = Math.max(400, pts.length * perCatWidth);
+    const plotH = 320;
+    const W = padL + plotW + padR, H = padT + plotH + padB;
+    const sx = i => padL + (i + 0.5) * perCatWidth;
     const sy = v => padT + plotH - (v / domainMax) * plotH;
 
     const ticks = [];
     for(let v = 0; v <= domainMax; v += 20) ticks.push(v);
 
     const gridLines = ticks.map(v => `
-      <line class="grid-line" x1="${sx(v)}" y1="${padT}" x2="${sx(v)}" y2="${padT + plotH}"></line>
       <line class="grid-line" x1="${padL}" y1="${sy(v)}" x2="${padL + plotW}" y2="${sy(v)}"></line>
-      <text class="tick-label" x="${sx(v)}" y="${padT + plotH + 14}" text-anchor="middle">${v}</text>
       <text class="tick-label" x="${padL - 8}" y="${sy(v) + 3}" text-anchor="end">${v}</text>
     `).join('');
 
-    const points = pts.map(r => {
-      const diff = r.after - r.before;
-      const cls = diff > 0.05 ? 'improved' : (diff < -0.05 ? 'declined' : 'same');
-      return `<circle class="scatter-point ${cls}" cx="${sx(r.before)}" cy="${sy(r.after)}" r="5">
-        <title>${escapeHtml(r.name)}：${r.before.toFixed(1)} → ${r.after.toFixed(1)}</title>
-      </circle>`;
-    }).join('');
+    const points = pts.map((r, i) => `
+      <circle class="scatter-point" cx="${sx(i)}" cy="${sy(r.after)}" r="4.5">
+        <title>${escapeHtml(r.name)}：${r.after.toFixed(1)}（${gradeFor(r.after)}）</title>
+      </circle>
+      <text class="tick-label" x="0" y="0" text-anchor="end"
+            transform="translate(${sx(i)} ${padT + plotH + 12}) rotate(-60)">${escapeHtml(r.name)}</text>
+    `).join('');
 
     wrap.innerHTML = `
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto;">
-        ${gridLines}
-        <line class="axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}"></line>
-        <line class="axis-line" x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}"></line>
-        <line class="diagonal-line" x1="${sx(0)}" y1="${sy(0)}" x2="${sx(domainMax)}" y2="${sy(domainMax)}"></line>
-        ${points}
-        <text class="axis-label" x="${padL + plotW / 2}" y="${H - 6}" text-anchor="middle">修正前スコア（Before）</text>
-        <text class="axis-label" x="-${padT + plotH / 2}" y="14" text-anchor="middle" transform="rotate(-90)">修正後スコア（After）</text>
-      </svg>`;
+      <div style="overflow-x:auto;">
+        <svg viewBox="0 0 ${W} ${H}" style="width:${W}px; max-width:none; height:auto; display:block;">
+          ${gridLines}
+          <line class="axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}"></line>
+          <line class="axis-line" x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}"></line>
+          ${points}
+          <text class="axis-label" x="-${padT + plotH / 2}" y="14" text-anchor="middle" transform="rotate(-90)">修正後スコア（After）</text>
+        </svg>
+      </div>`;
   }
 
-  function renderRankBars(rows){
-    const wrap = document.getElementById('rank-bar-wrap');
+  function computeRankCounts(rows){
     const grades = ['S', 'A', 'B', 'C', 'D', 'E'];
     const beforeCounts = Object.fromEntries(grades.map(g => [g, 0]));
     const afterCounts = Object.fromEntries(grades.map(g => [g, 0]));
@@ -276,6 +273,12 @@
       if(r.before !== null) beforeCounts[gradeFor(r.before)]++;
       if(r.after !== null) afterCounts[gradeFor(r.after)]++;
     });
+    return { grades, beforeCounts, afterCounts };
+  }
+
+  function renderRankBars(rows){
+    const wrap = document.getElementById('rank-bar-wrap');
+    const { grades, beforeCounts, afterCounts } = computeRankCounts(rows);
     const maxCount = Math.max(1, ...grades.map(g => Math.max(beforeCounts[g], afterCounts[g])));
 
     const W = 420, H = 300;
@@ -307,10 +310,34 @@
       </svg>`;
   }
 
+  function renderRankTable(rows){
+    const wrap = document.getElementById('rank-table-wrap');
+    const { grades, beforeCounts, afterCounts } = computeRankCounts(rows);
+    wrap.innerHTML = `
+      <table class="rank-table">
+        <thead>
+          <tr><th>ランク</th>${grades.map(g => `<th>${g}</th>`).join('')}<th>計</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="row-label">修正前</td>
+            ${grades.map(g => `<td>${beforeCounts[g]}</td>`).join('')}
+            <td>${grades.reduce((sum, g) => sum + beforeCounts[g], 0)}</td>
+          </tr>
+          <tr>
+            <td class="row-label">修正後</td>
+            ${grades.map(g => `<td>${afterCounts[g]}</td>`).join('')}
+            <td>${grades.reduce((sum, g) => sum + afterCounts[g], 0)}</td>
+          </tr>
+        </tbody>
+      </table>`;
+  }
+
   function renderAll(){
     const rows = computeAll();
     renderScatter(rows);
     renderRankBars(rows);
+    renderRankTable(rows);
     document.getElementById('analysis-note').textContent =
       `対象：${rows.length}名（このシートに評価データが入力されている人のみ集計しています）`;
   }
