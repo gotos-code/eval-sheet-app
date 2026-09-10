@@ -154,6 +154,15 @@ before update on public.eval_sheets
 for each row execute procedure public.eval_sheets_set_updated_at();
 ```
 
-## 5. GitHub Pagesの公開設定
+## 5. サマリーのリアルタイム反映を有効化
+
+誰かがサマリーで評価を変更したとき、他の人が開いている画面にも自動で反映されるようにします。SQL Editorで実行してください。
+
+```sql
+alter table public.eval_sheets replica identity full;
+alter publication supabase_realtime add table public.eval_sheets;
+```
+
+## 6. GitHub Pagesの公開設定
 
 `main` ブランチのルートから配信するよう設定済みです。公開URL：https://gotos-code.github.io/eval-sheet-app/

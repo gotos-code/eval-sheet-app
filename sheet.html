@@ -1837,8 +1837,28 @@
   }
 
   /* ---------- boot ---------- */
+  function subscribeRealtime(){
+    sb.channel('eval_sheets_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eval_sheets' }, (payload) => {
+        const list = window.__allPeople || [];
+        if(payload.eventType === 'DELETE'){
+          window.__allPeople = list.filter(p => p.id !== payload.old.id);
+        } else {
+          const row = { id: payload.new.id, name: payload.new.name, data: payload.new.data, updated_at: payload.new.updated_at };
+          const idx = list.findIndex(p => p.id === row.id);
+          if(idx >= 0) list[idx] = row; else list.push(row);
+        }
+        // don't yank focus away from someone actively editing a field mid-update
+        const peopleList = document.getElementById('people-list');
+        const isEditing = document.activeElement && peopleList.contains(document.activeElement);
+        if(!isEditing) applyFiltersAndRender();
+      })
+      .subscribe();
+  }
+
   window.__initSheetApp = async function(){
     await loadSummaryList();
+    subscribeRealtime();
   };
 })();
 </script>
