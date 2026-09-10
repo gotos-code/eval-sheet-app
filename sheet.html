@@ -293,6 +293,20 @@
     padding:3px 2px;
     margin:0 auto;
   }
+  .summary-table td.revision-cell{
+    font-weight:700;
+    color:var(--muted);
+    font-size:12px;
+    min-width:60px;
+  }
+  .summary-table td.revision-cell.has-revision{ color:var(--note); }
+  .summary-table td.comment-cell{ min-width:180px; }
+  .summary-table input.summary-comment-input{
+    width:100%;
+    font-size:12px;
+    padding:5px 7px;
+    text-align:left;
+  }
   .summary-table th.sub-head{
     background:var(--surface);
     color:var(--muted);
@@ -1251,8 +1265,21 @@
     const entry = state.models[tabId];
     if(entry.activePeriod === newPeriod) return;
     const panel = document.querySelector(`.tab-panel[data-tab-id="${tabId}"]`);
-    // keep whatever was on screen before switching away from it
-    entry.periods[entry.activePeriod] = collectModelFromDOM(panel);
+    // keep whatever was on screen before switching away from it, but carry over
+    // revisedSelf/revisionComment (summary-only fields with no UI here) instead
+    // of letting collectModelFromDOM silently drop them.
+    const outgoingPrev = entry.periods[entry.activePeriod];
+    const outgoingCollected = collectModelFromDOM(panel);
+    if(outgoingPrev){
+      outgoingCollected.items.forEach((it, i) => {
+        if(outgoingPrev.items[i]) it.revisedSelf = outgoingPrev.items[i].revisedSelf ?? null;
+      });
+      if(outgoingCollected.contribution && outgoingPrev.contribution){
+        outgoingCollected.contribution.revisedSelf = outgoingPrev.contribution.revisedSelf ?? null;
+      }
+      outgoingCollected.revisionComment = outgoingPrev.revisionComment || '';
+    }
+    entry.periods[entry.activePeriod] = outgoingCollected;
     entry.activePeriod = newPeriod;
     if(!entry.periods[newPeriod]) entry.periods[newPeriod] = JSON.parse(JSON.stringify(SAMPLE_MODEL));
     renderModel(panel, entry.periods[newPeriod]);
@@ -1352,7 +1379,20 @@
     const statusEl = panel.querySelector('.import-status');
 
     // sync whatever's currently on screen back into memory first
-    entry.periods[entry.activePeriod] = collectModelFromDOM(panel);
+    const previousModel = entry.periods[entry.activePeriod];
+    const collected = collectModelFromDOM(panel);
+    // the per-person editor has no UI for revisedSelf/revisionComment (summary-only
+    // fields), so carry them over here instead of silently dropping them on save.
+    if(previousModel){
+      collected.items.forEach((it, i) => {
+        if(previousModel.items[i]) it.revisedSelf = previousModel.items[i].revisedSelf ?? null;
+      });
+      if(collected.contribution && previousModel.contribution){
+        collected.contribution.revisedSelf = previousModel.contribution.revisedSelf ?? null;
+      }
+      collected.revisionComment = previousModel.revisionComment || '';
+    }
+    entry.periods[entry.activePeriod] = collected;
     const name = entry.periods[entry.activePeriod].meta.name.trim();
     if(!name){
       statusEl.textContent = '氏名を入力してから保存してください';
@@ -1466,6 +1506,22 @@
     applyFiltersAndRender();
   }
 
+  // Which items differ between Before(self) and After(revisedSelf) — auto-derived, not manually entered.
+  function computeRevisionLabel(model){
+    if(!model) return '—';
+    const labels = [];
+    (model.items || []).forEach((it, i) => {
+      if(it && it.revisedSelf !== null && it.revisedSelf !== undefined && it.revisedSelf !== it.self){
+        labels.push(['①', '②', '③', '④', '⑤'][i] || String(i + 1));
+      }
+    });
+    const c = model.contribution;
+    if(c && c.revisedSelf !== null && c.revisedSelf !== undefined && c.revisedSelf !== c.self){
+      labels.push('貢献');
+    }
+    return labels.length ? labels.join('') : '—';
+  }
+
   function buildPersonRow(p){
     const model = normalizePeriods(p.data)[summaryPeriod];
     const items = (model && model.items) || [];
@@ -1489,6 +1545,8 @@
       : '<td>—</td><td>—</td>';
     const gradeBefore = fmtGrade(computeTotalBefore(model));
     const gradeAfter = fmtGrade(computeTotalAfter(model));
+    const revisionLabel = computeRevisionLabel(model);
+    const comment = (model && model.revisionComment) || '';
     return `
       <tr class="person-row" data-id="${p.id}">
         <td class="col-name">${escapeHtml(p.name)}</td>
@@ -1496,6 +1554,8 @@
         ${contribCells}
         <td class="col-before"><span class="grade-pill">${gradeBefore}</span></td>
         <td class="col-after"><span class="grade-pill after">${gradeAfter}</span></td>
+        <td class="revision-cell${revisionLabel === '—' ? '' : ' has-revision'}">${escapeHtml(revisionLabel)}</td>
+        <td class="comment-cell"><input type="text" class="summary-comment-input" value="${escapeHtml(comment)}" placeholder="修正コメント"></td>
       </tr>`;
   }
 
@@ -1523,6 +1583,8 @@
               ${itemHeaders}
               <th colspan="2">貢献ポイント</th>
               <th colspan="2">評価ランク</th>
+              <th rowspan="2">修正項目</th>
+              <th rowspan="2">コメント</th>
             </tr>
             <tr>${beforeAfterHeaders}${subHeaderHtml('Before', 'contribBefore')}${subHeaderHtml('After', 'contribAfter')}${subHeaderHtml('Before', 'gradeBefore')}${subHeaderHtml('After', 'gradeAfter')}</tr>
           </thead>
@@ -1615,7 +1677,8 @@
   document.getElementById('people-list').addEventListener('change', async (e) => {
     const tierSelect = e.target.closest('select.summary-tier-select');
     const contribInput = e.target.closest('input.summary-contrib-input');
-    const field = tierSelect || contribInput;
+    const commentInput = e.target.closest('input.summary-comment-input');
+    const field = tierSelect || contribInput || commentInput;
     if(!field) return;
 
     const row = field.closest('tr.person-row');
@@ -1631,14 +1694,24 @@
       const itemIdx = Number(tierSelect.dataset.itemIdx);
       if(!model.items[itemIdx]) return;
       model.items[itemIdx].revisedSelf = tierSelect.value === '' ? null : Number(tierSelect.value);
-    } else {
+    } else if(contribInput){
       if(!model.contribution) return;
       model.contribution.revisedSelf = contribInput.value === '' ? null : Number(contribInput.value);
+    } else {
+      model.revisionComment = commentInput.value;
     }
     person.data = periods;
 
-    const gradeEl = row.querySelector('.grade-pill.after');
-    if(gradeEl) gradeEl.textContent = fmtGrade(computeTotalAfter(model));
+    if(tierSelect || contribInput){
+      const gradeEl = row.querySelector('.grade-pill.after');
+      if(gradeEl) gradeEl.textContent = fmtGrade(computeTotalAfter(model));
+      const revisionEl = row.querySelector('.revision-cell');
+      if(revisionEl){
+        const label = computeRevisionLabel(model);
+        revisionEl.textContent = label;
+        revisionEl.classList.toggle('has-revision', label !== '—');
+      }
+    }
 
     const statusEl = document.getElementById('summary-status');
     field.disabled = true;
