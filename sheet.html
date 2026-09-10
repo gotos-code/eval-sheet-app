@@ -292,7 +292,7 @@
     font-size:13px;
   }
   .summary-table select.summary-tier-select,
-  .summary-table input.summary-contrib-input{
+  .summary-table select.summary-contrib-select{
     width:56px;
     text-align:center;
     font-size:12px;
@@ -780,6 +780,14 @@
     let out = `<option value="">未入力</option>`;
     for(let i=1;i<=tierCount;i++){
       out += `<option value="${i}"${Number(selected)===i ? ' selected' : ''}>${i}</option>`;
+    }
+    return out;
+  }
+
+  function pointOptions(selected, weight){
+    let out = `<option value="">未入力</option>`;
+    for(let v = -weight; v <= weight; v++){
+      out += `<option value="${v}"${Number(selected) === v ? ' selected' : ''}>${v}</option>`;
     }
     return out;
   }
@@ -1558,7 +1566,7 @@
           const before = (contrib.self !== null && contrib.self !== undefined) ? contrib.self : '—';
           const after = effectiveValue(contrib);
           return `<td class="col-before">${before}</td>` +
-            `<td class="col-after"><input type="number" class="summary-contrib-input" min="${-contrib.weight}" max="${contrib.weight}" value="${after ?? ''}" placeholder="-${contrib.weight}〜${contrib.weight}"></td>`;
+            `<td class="col-after"><select class="summary-contrib-select">${pointOptions(after, contrib.weight)}</select></td>`;
         })()
       : '<td>—</td><td>—</td>';
     const gradeBefore = fmtGrade(computeTotalBefore(model));
@@ -1704,10 +1712,10 @@
 
   document.getElementById('people-list').addEventListener('change', async (e) => {
     const tierSelect = e.target.closest('select.summary-tier-select');
-    const contribInput = e.target.closest('input.summary-contrib-input');
+    const contribSelect = e.target.closest('select.summary-contrib-select');
     const commentInput = e.target.closest('input.summary-comment-input');
     const confirmCheckbox = e.target.closest('input.summary-confirm-checkbox');
-    const field = tierSelect || contribInput || commentInput || confirmCheckbox;
+    const field = tierSelect || contribSelect || commentInput || confirmCheckbox;
     if(!field) return;
 
     const row = field.closest('tr.person-row');
@@ -1723,9 +1731,9 @@
       const itemIdx = Number(tierSelect.dataset.itemIdx);
       if(!model.items[itemIdx]) return;
       model.items[itemIdx].revisedSelf = tierSelect.value === '' ? null : Number(tierSelect.value);
-    } else if(contribInput){
+    } else if(contribSelect){
       if(!model.contribution) return;
-      model.contribution.revisedSelf = contribInput.value === '' ? null : Number(contribInput.value);
+      model.contribution.revisedSelf = contribSelect.value === '' ? null : Number(contribSelect.value);
     } else if(commentInput){
       model.revisionComment = commentInput.value;
     } else {
@@ -1733,7 +1741,7 @@
     }
     person.data = periods;
 
-    if(tierSelect || contribInput){
+    if(tierSelect || contribSelect){
       const gradeEl = row.querySelector('.grade-pill.after');
       if(gradeEl) gradeEl.textContent = fmtGrade(computeTotalAfter(model));
       const revisionEl = row.querySelector('.revision-cell');
