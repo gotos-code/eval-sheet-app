@@ -1562,7 +1562,7 @@
         <td class="col-before"><span class="grade-pill">${gradeBefore}</span></td>
         <td class="col-after"><span class="grade-pill after">${gradeAfter}</span></td>
         <td class="revision-cell${revisionLabel === '—' ? '' : ' has-revision'}">${escapeHtml(revisionLabel)}</td>
-        <td class="comment-cell"><input type="text" class="summary-comment-input" value="${escapeHtml(comment)}" placeholder="修正コメント"></td>
+        <td class="comment-cell"><input type="text" class="summary-comment-input" value="${escapeHtml(comment)}" title="${escapeHtml(comment)}" placeholder="修正コメント"></td>
       </tr>`;
   }
 
@@ -1679,6 +1679,12 @@
     const btn = e.target.closest('.person-row');
     if(!btn) return;
     openPersonTabById(btn.dataset.id);
+  });
+
+  document.getElementById('people-list').addEventListener('input', (e) => {
+    const commentInput = e.target.closest('input.summary-comment-input');
+    if(!commentInput) return;
+    commentInput.title = commentInput.value;
   });
 
   document.getElementById('people-list').addEventListener('change', async (e) => {
