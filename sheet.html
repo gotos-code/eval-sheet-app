@@ -276,9 +276,8 @@
     text-align:left;
     min-width:140px;
   }
-  .summary-table td.col-name{ font-weight:700; }
-  .summary-table tr.person-row{ cursor:pointer; }
-  .summary-table tr.person-row:hover td{ background:color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+  .summary-table td.col-name{ font-weight:700; cursor:pointer; }
+  .summary-table td.col-name:hover{ background:color-mix(in srgb, var(--accent) 8%, var(--surface)); text-decoration:underline; }
   .summary-table td.person-updated{ font-size:11px; font-weight:500; color:var(--muted); white-space:nowrap; }
   .grade-pill{
     display:inline-flex;
@@ -1235,10 +1234,15 @@
         </span>`).join('')}`;
   }
 
+  const scrollPositions = {};
+
   function setActive(tabId){
+    if(state.active) scrollPositions[state.active] = window.scrollY;
     state.active = tabId;
     document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = (p.dataset.tabId !== tabId); });
     renderTabBar();
+    const targetScroll = scrollPositions[tabId] || 0;
+    requestAnimationFrame(() => window.scrollTo(0, targetScroll));
   }
 
   function closeTab(tabId){
@@ -1675,10 +1679,11 @@
       applyFiltersAndRender();
       return;
     }
-    if(e.target.closest('select, input')) return;
-    const btn = e.target.closest('.person-row');
-    if(!btn) return;
-    openPersonTabById(btn.dataset.id);
+    const nameCell = e.target.closest('td.col-name');
+    if(!nameCell) return;
+    const row = nameCell.closest('.person-row');
+    if(!row) return;
+    openPersonTabById(row.dataset.id);
   });
 
   document.getElementById('people-list').addEventListener('input', (e) => {
