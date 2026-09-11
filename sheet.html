@@ -713,13 +713,13 @@
               <button class="period-btn" type="button" data-period="second_half">下期</button>
             </div>
             <input type="text" id="search-input" class="search-input" placeholder="氏名で検索">
-            <label class="rank-filter-label">Beforeランク
+            <label class="rank-filter-label">自己評価ランク
               <select id="rank-filter-before" class="rank-filter-select">
                 <option value="all">すべて</option>
                 <option>S</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
               </select>
             </label>
-            <label class="rank-filter-label">Afterランク
+            <label class="rank-filter-label">修正後ランク
               <select id="rank-filter-after" class="rank-filter-select">
                 <option value="all">すべて</option>
                 <option>S</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
@@ -1600,7 +1600,7 @@
     const itemHeaders = ['①', '②', '③', '④', '⑤']
       .map(label => `<th colspan="2">${label}</th>`).join('');
     const beforeAfterHeaders = Array.from({ length: 5 }, (_, i) =>
-      subHeaderHtml('Before', `item${i}Before`) + subHeaderHtml('After', `item${i}After`)).join('');
+      subHeaderHtml('自己評価', `item${i}Before`) + subHeaderHtml('修正後', `item${i}After`)).join('');
     return `
       <div class="item-group">
         <p class="footnote item-legend">${escapeHtml(legendText)}</p>
@@ -1615,7 +1615,7 @@
               <th rowspan="2">コメント</th>
               <th rowspan="2">確定</th>
             </tr>
-            <tr>${beforeAfterHeaders}${subHeaderHtml('Before', 'contribBefore')}${subHeaderHtml('After', 'contribAfter')}${subHeaderHtml('Before', 'gradeBefore')}${subHeaderHtml('After', 'gradeAfter')}</tr>
+            <tr>${beforeAfterHeaders}${subHeaderHtml('自己評価', 'contribBefore')}${subHeaderHtml('修正後', 'contribAfter')}${subHeaderHtml('自己評価', 'gradeBefore')}${subHeaderHtml('修正後', 'gradeAfter')}</tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
